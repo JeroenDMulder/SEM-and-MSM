@@ -30,7 +30,7 @@ This website is the online supplementary materials of @mulder_causal_2024. It co
 
 ## Erratum Notice
 
-After publication, an error in the R code for the simulation study was found. The simulation study was rerun after correction. Small numerical differences were found for DGM 5 of Figures 6 and 7, which do not impact the conclusions of the paper. See the Section Erratum for an explanation of the differences in results. The downloadable R code is corrected. 
+After publication, an error in the R code for the simulation study was found. The simulation study was rerun after correction. Small numerical differences were found for DGM 5 of Figures 6 and 7, which do not impact the conclusions of the paper. See the Section [Erratum](https://jeroendmulder.github.io/SEM-and-MSM/#erratum) for an explanation of the differences in results. The downloadable R code is corrected. 
 
 :::
 
