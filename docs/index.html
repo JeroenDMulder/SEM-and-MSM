@@ -192,17 +192,6 @@ window.Quarto = {
 
 
 <p>This website is the online supplementary materials of <span class="citation" data-cites="mulder_causal_2024">Mulder et al. (<a href="#ref-mulder_causal_2024" role="doc-biblioref">2024</a>)</span>. It contains the R code and Mplus syntax for both the empirical example and the simulation study, as well as additional explanations regarding the simulation study and its numerical results.</p>
-<section id="empirical-example" class="level1">
-<h1>Empirical Example</h1>
-<p>For the empirical example, we made use of the health survey data of the Longitudinal Internet studies for the Social Sciences panel, administered by Centerdata (Tilburg University, The Netherlands). More information about the LISS panel can be found at <a href="https://www.lissdata.nl">https://www.lissdata.nl</a> <span class="citation" data-cites="das_true_2018">(<a href="#ref-das_true_2018" role="doc-biblioref">Scherpenzeel 2018</a>)</span>. The data were prepared for analyses in R version 4.2.2 <span class="citation" data-cites="r_core_team_r_2022">(<a href="#ref-r_core_team_r_2022" role="doc-biblioref">R Core Team 2022</a>)</span>. Estimation of the joint effect of smoking cessation on end-of-study weight using inverse probability weighted regression of a marginal structural model was also done in R using the R packages WeightIt (version 0.14.0) by <span class="citation" data-cites="greifer_weightit_2023">Greifer (<a href="#ref-greifer_weightit_2023" role="doc-biblioref">2023b</a>)</span>, cobalt (version 4.5.0) by <span class="citation" data-cites="greifer_cobalt_2023">Greifer (<a href="#ref-greifer_cobalt_2023" role="doc-biblioref">2023a</a>)</span>, boot (version 1.3-28) by <span class="citation" data-cites="canty_boot_2022">Canty and Ripley (<a href="#ref-canty_boot_2022" role="doc-biblioref">2022</a>)</span>; mice (version 3.16.0) by <span class="citation" data-cites="van_buuren_mice_2011">Buuren and Groothuis-Oudshoorn (<a href="#ref-van_buuren_mice_2011" role="doc-biblioref">2011</a>)</span>; and foreign (version 0.8-83) by <span class="citation" data-cites="r_core_team_foreign_2023">R Core Team (<a href="#ref-r_core_team_foreign_2023" role="doc-biblioref">2023</a>)</span>. Additionally, we made use of the R packages dplyr (version 1.1.4) by <span class="citation" data-cites="wickham_dplyr_2023">Wickham et al. (<a href="#ref-wickham_dplyr_2023" role="doc-biblioref">2023</a>)</span>; purrr (version 1.0.2) by <span class="citation" data-cites="wickham_purrr_2023">Wickham and Henry (<a href="#ref-wickham_purrr_2023" role="doc-biblioref">2023</a>)</span>; and ggplot2 (version 3.4.4) by <span class="citation" data-cites="wickham_ggplot2_2016">Wickham (<a href="#ref-wickham_ggplot2_2016" role="doc-biblioref">2016</a>)</span>.</p>
-<p>&nbsp;&nbsp;&nbsp;&nbsp;🔗 <a href="https://github.com/JeroenDMulder/SEM-and-MSM/raw/main/R/20250112_Research_MSMSEM_EmpiricalExample_Article.Rmd">Click here to download the R code for the empirical example</a>.</p>
-<p>A path model was fitted to the LISS data in Mplus version 8.9 <span class="citation" data-cites="muthen_mplus_2017">(<a href="#ref-muthen_mplus_2017" role="doc-biblioref">Muthén and Muthén 2017</a>)</span>.</p>
-<p>&nbsp;&nbsp;&nbsp;&nbsp;🔗 <a href="https://github.com/JeroenDMulder/SEM-and-MSM/raw/main/Mplus/20250114_EmpiricalExample_Probit_Bootstrap.inp">Click here to download the Mplus input file for the empirical example</a>.</p>
-</section>
-<section id="simulation-study" class="level1">
-<h1>Simulation Study</h1>
-<p>For the simulation study, data were generated in R. Analyses of the generated data using using inverse probability weighted regression of a marginal structural model were also performed in R.</p>
-<p>&nbsp;&nbsp;&nbsp;&nbsp;🔗 <a href="https://github.com/JeroenDMulder/SEM-and-MSM/raw/main/R/20250110_Research_MSMSEM_Simulations_Article.Rmd">Click here to download the R code for the simulation study</a>.</p>
 <div class="callout callout-style-simple callout-important callout-titled">
 <div class="callout-header d-flex align-content-center">
 <div class="callout-icon-container">
@@ -213,11 +202,22 @@ Erratum Notice
 </div>
 </div>
 <div class="callout-body-container callout-body">
-<p>After publication, an error in the R code for the simulation study was found. The simulation study was rerun after correction. Small numerical differences were found for DGM 5 of Figures 6 and 7, which do not impact the conclusions of the paper. See the Section Erratum for an explanation of the differences in results. The downloadable R code above is corrected.</p>
+<p>After publication, an error in the R code for the simulation study was found. The simulation study was rerun after correction. Small numerical differences were found for DGM 5 of Figures 6 and 7, which do not impact the conclusions of the paper. See the Section Erratum for an explanation of the differences in results. The downloadable R code is corrected.</p>
 </div>
 </div>
+<section id="empirical-example" class="level1">
+<h1>Empirical Example</h1>
+<p>For the empirical example, we made use of the health survey data of the Longitudinal Internet studies for the Social Sciences panel, administered by Centerdata (Tilburg University, The Netherlands). More information about the LISS panel can be found at <a href="https://www.lissdata.nl">https://www.lissdata.nl</a> <span class="citation" data-cites="das_true_2018">(<a href="#ref-das_true_2018" role="doc-biblioref">Scherpenzeel 2018</a>)</span>. The data were prepared for analyses in R version 4.2.2 <span class="citation" data-cites="r_core_team_r_2022">(<a href="#ref-r_core_team_r_2022" role="doc-biblioref">R Core Team 2022</a>)</span>. Estimation of the joint effect of smoking cessation on end-of-study weight using inverse probability weighted regression of a marginal structural model was also done in R using the R packages WeightIt (version 0.14.0) by <span class="citation" data-cites="greifer_weightit_2023">Greifer (<a href="#ref-greifer_weightit_2023" role="doc-biblioref">2023b</a>)</span>, cobalt (version 4.5.0) by <span class="citation" data-cites="greifer_cobalt_2023">Greifer (<a href="#ref-greifer_cobalt_2023" role="doc-biblioref">2023a</a>)</span>, boot (version 1.3-28) by <span class="citation" data-cites="canty_boot_2022">Canty and Ripley (<a href="#ref-canty_boot_2022" role="doc-biblioref">2022</a>)</span>; mice (version 3.16.0) by <span class="citation" data-cites="van_buuren_mice_2011">Buuren and Groothuis-Oudshoorn (<a href="#ref-van_buuren_mice_2011" role="doc-biblioref">2011</a>)</span>; and foreign (version 0.8-83) by <span class="citation" data-cites="r_core_team_foreign_2023">R Core Team (<a href="#ref-r_core_team_foreign_2023" role="doc-biblioref">2023</a>)</span>. Additionally, we made use of the R packages dplyr (version 1.1.4) by <span class="citation" data-cites="wickham_dplyr_2023">Wickham et al. (<a href="#ref-wickham_dplyr_2023" role="doc-biblioref">2023</a>)</span>; purrr (version 1.0.2) by <span class="citation" data-cites="wickham_purrr_2023">Wickham and Henry (<a href="#ref-wickham_purrr_2023" role="doc-biblioref">2023</a>)</span>; and ggplot2 (version 3.4.4) by <span class="citation" data-cites="wickham_ggplot2_2016">Wickham (<a href="#ref-wickham_ggplot2_2016" role="doc-biblioref">2016</a>)</span>.</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;🔗 <a href="https://github.com/JeroenDMulder/SEM-and-MSM/blob/main/R/20250112_EmpiricalExample_Article.Rmd">Click here to download the R code for the empirical example</a>.</p>
+<p>A path model was fitted to the LISS data in Mplus version 8.9 <span class="citation" data-cites="muthen_mplus_2017">(<a href="#ref-muthen_mplus_2017" role="doc-biblioref">Muthén and Muthén 2017</a>)</span>.</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;🔗 <a href="https://github.com/JeroenDMulder/SEM-and-MSM/blob/main/Mplus/20250114_EmpiricalExample_Probit_Bootstrap.inp">Click here to download the Mplus input file for the empirical example</a>.</p>
+</section>
+<section id="simulation-study" class="level1">
+<h1>Simulation Study</h1>
+<p>For the simulation study, data were generated in R. Analyses of the generated data using using inverse probability weighted regression of a marginal structural model were also performed in R.</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;🔗 <a href="https://github.com/JeroenDMulder/SEM-and-MSM/blob/main/R/20250110_Simulations_Article.Rmd">Click here to download the R code for the simulation study</a>.</p>
 <p>Path models were fitted to the simulated data in Mplus version 8.9 <span class="citation" data-cites="muthen_mplus_2017">(<a href="#ref-muthen_mplus_2017" role="doc-biblioref">Muthén and Muthén 2017</a>)</span>.</p>
-<p>&nbsp;&nbsp;&nbsp;&nbsp;🔗 <a href="https://github.com/JeroenDMulder/SEM-and-MSM/raw/main/Mplus">Click here to download the Mplus input files for the simulation study</a>.</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;🔗 <a href="https://github.com/JeroenDMulder/SEM-and-MSM/tree/main/Mplus">Click here to download the Mplus input and output files for the simulation study</a>.</p>
 <section id="data-generating-mechanisms" class="level2">
 <h2 class="anchored" data-anchor-id="data-generating-mechanisms">Data Generating Mechanisms</h2>
 <p>Data were generated under five different data-generating mechanisms (DGMs), which differed with respect to the functional form of specific dependencies. These nonlinear dependencies are illustrated in Figure 5 in the main paper for DGMs 2, 3, and 4. Figure 5 displays the conditional relationships, that is, the relationship between one predictor and one expected outcome given a specific value of confounders for this relationship. In this subsection of the online supplementary materials, we provide additional visualizations of the nonlinear dependencies in DGMs 2, 3, and 4 to help illustrate the degree of nonlinearity across DGMs. We do this using fitted vs.&nbsp;residual plots, and by simulating the explained variance (<span class="math inline">\(R^{2}\)</span>) of the nonlinear component of the relationships.</p>
@@ -1706,7 +1706,7 @@ Erratum Notice
 <section id="erratum" class="level2">
 <h2 class="anchored" data-anchor-id="erratum">Erratum</h2>
 <p>An error in the R code was found after publications of the paper. The simulation study was rerun and minor differences were found in data generating mechanism (DGM) 5 for the linear IPW-MSM method, the linear path analysis, and the unadjusted method. In the original results, these methods performed badly, showing considerable bias and high MSE (see Figures 6 and 7 of the paper, respectively). After rerunning the simulation study, the performance of these methods in DGM 5 only worsened. Performance of the methods across the other experimental conditions indistinguishable from the original results in the main paper.</p>
-<p>The corrected Figures 6 and 7 are displayed below.</p>
+<p>The corrected Figures 6 and 7 are displayed below. Click the image to enlarge.</p>
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
 <p><a href="figures/figure6_erratum.png" class="lightbox" data-gallery="quarto-lightbox-gallery-1" title="Corrected Figure 6."><img src="figures/figure6_erratum.png" class="img-fluid figure-img" alt="Corrected Figure 6."></a></p>
@@ -2187,7 +2187,7 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
 });
 </script>
 </div> <!-- /content -->
-<script>var lightboxQuarto = GLightbox({"openEffect":"zoom","closeEffect":"zoom","descPosition":"bottom","selector":".lightbox","loop":false});
+<script>var lightboxQuarto = GLightbox({"selector":".lightbox","descPosition":"bottom","openEffect":"zoom","loop":false,"closeEffect":"zoom"});
 (function() {
   let previousOnload = window.onload;
   window.onload = () => {
