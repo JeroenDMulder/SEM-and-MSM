@@ -1,0 +1,541 @@
+---
+title: "R Code for Empirical Example of Mulder, Luijken, Penning de Vries, and Hamaker (2024)"
+author: "Jeroen D. Mulder and Kim Luijken"
+date: "01-12-2025"
+output:
+  bookdown::html_document2: default
+bibliography: references.bib
+link-citations: yes
+---
+
+This .Rmd-file is part of the online supplementary materials of Mulder, Luijken, Penning de Vries and Hamaker (2024). It contains the R code that was used for analyzing data from the Longitudinal Internet studies for the Social Sciences (LISS) panel as part of the empirical example of the main paper. More information about the LISS panel can be found at https://www.lissdata.nl. 
+
+```{r setup, message=FALSE}
+# Packages: Data 
+library(foreign) # Read data stored by SPSS
+library(sjlabelled)
+library(tidyverse)
+library(psych) 
+library(mice)
+
+# Packages: Visualization and results
+library(visdat) # Visualization missing data
+
+# Packages: Data analysis
+library(WeightIt)
+library(cobalt)
+library(boot)
+```
+
+
+# Data Preparation
+The wave-specific datasets (from 2007 to 2021) were first imported into R and merged together. This also included removing units with impossible or improbable values on particular variables, renaming variables, and dealing with missing data via single imputation. Impossible or improbably values included: 
+
+- Recorded `weight_0` and `weight_1` with impossibly low values (1 and 10 kg, respectively). 
+- Impossible high number of hours physically activity per week `HPA` (270 hours). 
+- A single unit who changed gender. 
+
+```{r example-preparation}
+df_LISS <- map(
+  .x = c("./data/ch07a_2p_EN.sav", "./data/ch08b_EN_1.3p.sav",
+         "./data/ch09c_EN_1.1p.sav", "./data/ch10d_EN_1.0p.sav",
+         "./data/ch11e_EN_1.0p.sav", "./data/ch12f_EN_1.0p.sav",
+         "./data/ch13g_EN_1.0p.sav", "./data/ch15h_EN_1.2p.sav", 
+         "./data/ch16i_EN_1.0p.sav", "./data/ch17j_EN_1.0p.sav", 
+         "./data/ch18k_EN_1.0p.sav", "./data/ch19l_EN_1.0p.sav",
+         "./data/ch20m_EN_1.0p.sav", "./data/ch21n_EN_1.0p.sav"),
+    read.spss, 
+    use.value.labels = FALSE, 
+    to.data.frame = TRUE
+  ) |>
+  reduce(full_join, by = "nomem_encr") |>
+  select( # Select exposure, outcome, and covariates
+    nomem_encr, 
+    ends_with("017"), # Weight
+    ends_with("126"), # Smoking status ("Do you smoke?", 1 = yes, 2 = no, I quit)
+    ends_with("001"), # Sex
+    ends_with("002"), # Age
+    ends_with("005"), # Is your health better or worse than last year?
+    ends_with("127"), # What do/did you smoke? Cigarettes (including shag)
+    ends_with("128"), # What do/did you smoke? Pipe 
+    ends_with("129"), # What do/did you smoke? Cigars 
+    ends_with("130"), # Number of cigarettes per day
+    ends_with("131"), # Number of pipes per day
+    ends_with("132"), # Number of cigars per day
+    ends_with("133"), # Alcohol (average last 12 months, categories)
+    ends_with("080"), # Doctor diagnoses angina (last year, 0 = no, 1 = yes) 
+    ends_with("081"), # Doctor diagnoses heart problems (last year, 0 = no, 1 = yes)
+    ends_with("082"), # Doctor diagnoses high blood pressure (last year, 0 = no, 1 = yes)
+    ends_with("083"), # Doctor diagnoses high cholesterol (last year, 0 = no, 1 = yes) 
+    ends_with("084"), # Doctor diagnoses beroerte (last year, 0 = no, 1 = yes)
+    ends_with("085"), # Doctor diagnoses diabetes (last year, 0 = no, 1 = yes)
+    ends_with("086"), # Doctor diagnoses lung disease (last year, 0 = no, 1 = yes) 
+    ends_with("087"), # Doctor diagnoses astma (last year, 0 = no, 1 = yes) 
+    ends_with("088"), # Doctor diagnoses artritis (last year, 0 = no, 1 = yes) 
+    ends_with("089"), # Doctor diagnoses cancer (last year, 0 = no, 1 = yes)
+    ends_with("090"), # Doctor diagnoses gastric ulcer (last year, 0 = no, 1 = yes) 
+    ends_with("092"), # Doctor diagnoses staar (last year, 0 = no, 1 = yes)
+    ends_with("096"), # Doctor diagnoses goedaardige tumor (last year, 0 = no, 1 = yes)
+    ends_with("186"), # Hours heavy physical activity (average last week)
+    ends_with("071") # Do you regularly suffer from heart problems, angina, pain in chest?
+  ) |>
+  rename(
+    ID = nomem_encr, 
+    weight_07 = ch07a017, weight_08 = ch08b017, weight_09 = ch09c017, weight_10 = ch10d017,
+      weight_11 = ch11e017, weight_12 = ch12f017, weight_13 = ch13g017, weight_15 = ch15h017, 
+      weight_16 = ch16i017, weight_17 = ch17j017, weight_18 = ch18k017, weight_19 = ch19l017,
+      weight_20 = ch20m017, weight_21 = ch21n017,
+    smoke_07 = ch07a126, smoke_08 = ch08b126, smoke_09 = ch09c126, smoke_10 = ch10d126,
+      smoke_11 = ch11e126, smoke_12 = ch12f126, smoke_13 = ch13g126, smoke_15 = ch15h126, 
+      smoke_16 = ch16i126, smoke_17 = ch17j126, smoke_18 = ch18k126, smoke_19 = ch19l126,
+      smoke_20 = ch20m126, smoke_21 = ch21n126,
+    sex_08 = ch08b001, sex_09 = ch09c001, sex_10 = ch10d001, 
+      sex_11 = ch11e001, sex_12 = ch12f001, sex_13 = ch13g001, sex_15 = ch15h001, 
+      sex_16 = ch16i001, sex_17 = ch17j001, sex_18 = ch18k001, sex_19 = ch19l001,
+      sex_20 = ch20m001, sex_21 = ch21n001,
+    age_08 = ch08b002, age_09 = ch09c002, age_10 = ch10d002,
+      age_11 = ch11e002, age_12 = ch12f002, age_13 = ch13g002, age_15 = ch15h002, 
+      age_16 = ch16i002, age_17 = ch17j002, age_18 = ch18k002, age_19 = ch19l002,
+      age_20 = ch20m002, age_21 = ch21n002,
+    geznd_07 = ch07a005, geznd_08 = ch08b005, geznd_09 = ch09c005, geznd_10 = ch10d005,
+      geznd_11 = ch11e005, geznd_12 = ch12f005, geznd_13 = ch13g005, geznd_15 = ch15h005, 
+      geznd_16 = ch16i005, geznd_17 = ch17j005, geznd_18 = ch18k005, geznd_19 = ch19l005,
+      geznd_20 = ch20m005, geznd_21 = ch21n005,
+    tCret_07 = ch07a127, tCret_08 = ch08b127, tCret_09 = ch09c127, tCret_10 = ch10d127,
+      tCret_11 = ch11e127, tCret_12 = ch12f127, tCret_13 = ch13g127, tCret_15 = ch15h127, 
+      tCret_16 = ch16i127, tCret_17 = ch17j127, tCret_18 = ch18k127, tCret_19 = ch19l127,
+      tCret_20 = ch20m127, tCret_21 = ch21n127,
+    tPipe_07 = ch07a128, tPipe_08 = ch08b128, tPipe_09 = ch09c128, tPipe_10 = ch10d128,
+      tPipe_11 = ch11e128, tPipe_12 = ch12f128, tPipe_13 = ch13g128, tPipe_15 = ch15h128, 
+      tPipe_16 = ch16i128, tPipe_17 = ch17j128, tPipe_18 = ch18k128, tPipe_19 = ch19l128,
+      tPipe_20 = ch20m128, tPipe_21 = ch21n128,
+    tCigar_07 = ch07a129, tCigar_08 = ch08b129, tCigar_09 = ch09c129, tCigar_10 = ch10d129,
+      tCigar_11 = ch11e129, tCigar_12 = ch12f129, tCigar_13 = ch13g129, tCigar_15 = ch15h129, 
+      tCigar_16 = ch16i129, tCigar_17 = ch17j129, tCigar_18 = ch18k129, tCigar_19 = ch19l129,
+      tCigar_20 = ch20m129, tCigar_21 = ch21n129,
+    nCret_07 = ch07a130, nCret_08 = ch08b130, nCret_09 = ch09c130, nCret_10 = ch10d130,
+      nCret_11 = ch11e130, nCret_12 = ch12f130, nCret_13 = ch13g130, nCret_15 = ch15h130, 
+      nCret_16 = ch16i130, nCret_17 = ch17j130, nCret_18 = ch18k130, nCret_19 = ch19l130,
+      nCret_20 = ch20m130, nCret_21 = ch21n130,
+    nPipe_07 = ch07a131, nPipe_08 = ch08b131, nPipe_09 = ch09c131, nPipe_10 = ch10d131,
+      nPipe_11 = ch11e131, nPipe_12 = ch12f131, nPipe_13 = ch13g131, nPipe_15 = ch15h131, 
+      nPipe_16 = ch16i131, nPipe_17 = ch17j131, nPipe_18 = ch18k131, nPipe_19 = ch19l131,
+      nPipe_20 = ch20m131, nPipe_21 = ch21n131,
+    nCigar_07 = ch07a132, nCigar_08 = ch08b132, nCigar_09 = ch09c132, nCigar_10 = ch10d132,
+      nCigar_11 = ch11e132, nCigar_12 = ch12f132, nCigar_13 = ch13g132, nCigar_15 = ch15h132, 
+      nCigar_16 = ch16i132, nCigar_17 = ch17j132, nCigar_18 = ch18k132, nCigar_19 = ch19l132,
+      nCigar_20 = ch20m132, nCigar_21 = ch21n132,
+    alc_07 = ch07a133, alc_08 = ch08b133, alc_09 = ch09c133, alc_10 = ch10d133,
+      alc_11 = ch11e133, alc_12 = ch12f133, alc_13 = ch13g133, alc_15 = ch15h133, 
+      alc_16 = ch16i133, alc_17 = ch17j133, alc_18 = ch18k133, alc_19 = ch19l133,
+      alc_20 = ch20m133, alc_21 = ch21n133,
+    dAngina_07 = ch07a080, dAngina_08 = ch08b080, dAngina_09 = ch09c080, dAngina_10 = ch10d080,
+      dAngina_11 = ch11e080, dAngina_12 = ch12f080, dAngina_13 = ch13g080, dAngina_15 = ch15h080, 
+      dAngina_16 = ch16i080, dAngina_17 = ch17j080, dAngina_18 = ch18k080, dAngina_19 = ch19l080,
+      dAngina_20 = ch20m080, dAngina_21 = ch21n080, 
+    dHeart_07 = ch07a081, dHeart_08 = ch08b081, dHeart_09 = ch09c081, dHeart_10 = ch10d081,
+      dHeart_11 = ch11e081, dHeart_12 = ch12f081, dHeart_13 = ch13g081, dHeart_15 = ch15h081, 
+      dHeart_16 = ch16i081, dHeart_17 = ch17j081, dHeart_18 = ch18k081, dHeart_19 = ch19l081,
+      dHeart_20 = ch20m081, dHeart_21 = ch21n081,
+    dBlood_07 = ch07a082, dBlood_08 = ch08b082, dBlood_09 = ch09c082, dBlood_10 = ch10d082,
+      dBlood_11 = ch11e082, dBlood_12 = ch12f082, dBlood_13 = ch13g082, dBlood_15 = ch15h082, 
+      dBlood_16 = ch16i082, dBlood_17 = ch17j082, dBlood_18 = ch18k082, dBlood_19 = ch19l082,
+      dBlood_20 = ch20m082, dBlood_21 = ch21n082,
+    dChol_07 = ch07a083, dChol_08 = ch08b083, dChol_09 = ch09c083, dChol_10 = ch10d083,
+      dChol_11 = ch11e083, dChol_12 = ch12f083, dChol_13 = ch13g083, dChol_15 = ch15h083, 
+      dChol_16 = ch16i083, dChol_17 = ch17j083, dChol_18 = ch18k083, dChol_19 = ch19l083,
+      dChol_20 = ch20m083, dChol_21 = ch21n083,
+    dBeroe_07 = ch07a084, dBeroe_08 = ch08b084, dBeroe_09 = ch09c084, dBeroe_10 = ch10d084,
+      dBeroe_11 = ch11e084, dBeroe_12 = ch12f084, dBeroe_13 = ch13g084, dBeroe_15 = ch15h084, 
+      dBeroe_16 = ch16i084, dBeroe_17 = ch17j084, dBeroe_18 = ch18k084, dBeroe_19 = ch19l084,
+      dBeroe_20 = ch20m084, dBeroe_21 = ch21n084,
+    dDiab_07 = ch07a085, dDiab_08 = ch08b085, dDiab_09 = ch09c085, dDiab_10 = ch10d085,
+      dDiab_11 = ch11e085, dDiab_12 = ch12f085, dDiab_13 = ch13g085, dDiab_15 = ch15h085, 
+      dDiab_16 = ch16i085, dDiab_17 = ch17j085, dDiab_18 = ch18k085, dDiab_19 = ch19l085,
+      dDiab_20 = ch20m085, dDiab_21 = ch21n085,
+    dLung_07 = ch07a086, dLung_08 = ch08b086, dLung_09 = ch09c086, dLung_10 = ch10d086,
+      dLung_11 = ch11e086, dLung_12 = ch12f086, dLung_13 = ch13g086, dLung_15 = ch15h086, 
+      dLung_16 = ch16i086, dLung_17 = ch17j086, dLung_18 = ch18k086, dLung_19 = ch19l086,
+      dLung_20 = ch20m086, dLung_21 = ch21n086,
+    dAstm_07 = ch07a087, dAstm_08 = ch08b087, dAstm_09 = ch09c087, dAstm_10 = ch10d087,
+      dAstm_11 = ch11e087, dAstm_12 = ch12f087, dAstm_13 = ch13g087, dAstm_15 = ch15h087, 
+      dAstm_16 = ch16i087, dAstm_17 = ch17j087, dAstm_18 = ch18k087, dAstm_19 = ch19l087,
+      dAstm_20 = ch20m087, dAstm_21 = ch21n087,
+    dArtr_07 = ch07a088, dArtr_08 = ch08b088, dArtr_09 = ch09c088, dArtr_10 = ch10d088,
+      dArtr_11 = ch11e088, dArtr_12 = ch12f088, dArtr_13 = ch13g088, dArtr_15 = ch15h088, 
+      dArtr_16 = ch16i088, dArtr_17 = ch17j088, dArtr_18 = ch18k088, dArtr_19 = ch19l088,
+      dArtr_20 = ch20m088, dArtr_21 = ch21n088,
+    dKank_07 = ch07a089, dKank_08 = ch08b089, dKank_09 = ch09c089, dKank_10 = ch10d089,
+      dKank_11 = ch11e089, dKank_12 = ch12f089, dKank_13 = ch13g089, dKank_15 = ch15h089, 
+      dKank_16 = ch16i089, dKank_17 = ch17j089, dKank_18 = ch18k089, dKank_19 = ch19l089,
+      dKank_20 = ch20m089, dKank_21 = ch21n089,
+    dUlcer_07 = ch07a090, dUlcer_08 = ch08b090, dUlcer_09 = ch09c090, dUlcer_10 = ch10d090,
+      dUlcer_11 = ch11e090, dUlcer_12 = ch12f090, dUlcer_13 = ch13g090, dUlcer_15 = ch15h090, 
+      dUlcer_16 = ch16i090, dUlcer_17 = ch17j090, dUlcer_18 = ch18k090, dUlcer_19 = ch19l090,
+      dUlcer_20 = ch20m090, dUlcer_21 = ch21n090,
+    dStaa_07 = ch07a092, dStaa_08 = ch08b092, dStaa_09 = ch09c092, dStaa_10 = ch10d092,
+      dStaa_11 = ch11e092, dStaa_12 = ch12f092, dStaa_13 = ch13g092, dStaa_15 = ch15h092, 
+      dStaa_16 = ch16i092, dStaa_17 = ch17j092, dStaa_18 = ch18k092, dStaa_19 = ch19l092,
+      dStaa_20 = ch20m092, dStaa_21 = ch21n092,
+    dTumo_07 = ch07a096, dTumo_08 = ch08b096, dTumo_09 = ch09c096, dTumo_10 = ch10d096,
+      dTumo_11 = ch11e096, dTumo_12 = ch12f096, dTumo_13 = ch13g096, dTumo_15 = ch15h096, 
+      dTumo_16 = ch16i096, dTumo_17 = ch17j096, dTumo_18 = ch18k096, dTumo_19 = ch19l096,
+      dTumo_20 = ch20m096, dTumo_21 = ch21n096,
+    hourHPA_07 = ch07a186, hourHPA_08 = ch08b186, hourHPA_09 = ch09c186, hourHPA_10 = ch10d186,
+      hourHPA_11 = ch11e186, hourHPA_12 = ch12f186, hourHPA_13 = ch13g186, hourHPA_15 = ch15h186, 
+      hourHPA_16 = ch16i186, hourHPA_17 = ch17j186, hourHPA_18 = ch18k186, # From 2019 onwards not measured
+    sHeart_07 = ch07a071, sHeart_08 = ch08b071, sHeart_09 = ch09c071, sHeart_10 = ch10d071,
+      sHeart_11 = ch11e071, sHeart_12 = ch12f071, sHeart_13 = ch13g071, sHeart_15 = ch15h071, 
+      sHeart_16 = ch16i071, sHeart_17 = ch17j071, sHeart_18 = ch18k071, sHeart_19 = ch19l071,
+      sHeart_20 = ch20m071, sHeart_21 = ch21n071
+  ) |>
+  remove_all_labels() 
+
+# Explore missingness in exposure
+vis_miss(select(df_LISS, starts_with("smoke")))
+
+# For each enrollment year, select target population
+df_LISS07 <- df_LISS |> filter(smoke_07 == 1)
+
+df_LISS08 <- df_LISS |> filter(is.na(weight_07) & smoke_08 == 1)
+
+df_LISS09 <- df_LISS |> 
+  filter(is.na(weight_07) & is.na(weight_08) & smoke_09 == 1)
+
+df_LISS10 <- df_LISS |>
+  filter(is.na(weight_07) & is.na(weight_08) & is.na(weight_09) & smoke_10 == 1)
+
+df_LISS11 <- df_LISS |>
+  filter(
+    is.na(weight_07) & is.na(weight_08) & is.na(weight_09) & is.na(weight_10) & 
+    smoke_11 == 1
+  )
+
+df_LISS12 <- df_LISS |>
+  filter(
+    is.na(weight_07) & is.na(weight_08) & is.na(weight_09) & is.na(weight_10) & 
+      is.na(weight_11) & 
+    smoke_12 == 1
+  )
+
+df_LISS13 <- df_LISS |>
+  filter(
+    is.na(weight_07) & is.na(weight_08) & is.na(weight_09) & is.na(weight_10) & 
+      is.na(weight_11) & is.na(weight_12) & 
+    smoke_13 == 1
+  )
+
+df_LISS15 <- df_LISS |>
+  filter(
+    is.na(weight_07) & is.na(weight_08) & is.na(weight_09) & is.na(weight_10) & 
+      is.na(weight_11) & is.na(weight_12) & is.na(weight_13) &
+    smoke_15 == 1
+  )
+
+df_LISS16 <- df_LISS |>
+  filter(
+    is.na(weight_07) & is.na(weight_08) & is.na(weight_09) & is.na(weight_10) & 
+      is.na(weight_11) & is.na(weight_12) & is.na(weight_13) & is.na(weight_15) &
+    smoke_16 == 1
+  )
+
+df_LISS17 <- df_LISS |>
+  filter(
+    is.na(weight_07) & is.na(weight_08) & is.na(weight_09) & is.na(weight_10) & 
+      is.na(weight_11) & is.na(weight_12) & is.na(weight_13) & is.na(weight_15) &
+      is.na(weight_16) &
+    smoke_17 == 1
+  )
+
+df_LISS18 <- df_LISS |>
+  filter(
+    is.na(weight_07) & is.na(weight_08) & is.na(weight_09) & is.na(weight_10) & 
+      is.na(weight_11) & is.na(weight_12) & is.na(weight_13) & is.na(weight_15) &
+      is.na(weight_16) & is.na(weight_17) & 
+    smoke_18 == 1
+  )
+
+df_LISS19 <- df_LISS |>
+  filter(
+    is.na(weight_07) & is.na(weight_08) & is.na(weight_09) & is.na(weight_10) & 
+      is.na(weight_11) & is.na(weight_12) & is.na(weight_13) & is.na(weight_15) &
+      is.na(weight_16) & is.na(weight_17) & is.na(weight_18) &
+    smoke_19 == 1
+  )
+
+df_LISS20 <- df_LISS |>
+  filter(
+    is.na(weight_07) & is.na(weight_08) & is.na(weight_09) & is.na(weight_10) & 
+      is.na(weight_11) & is.na(weight_12) & is.na(weight_13) & is.na(weight_15) &
+      is.na(weight_16) & is.na(weight_17) & is.na(weight_18) & is.na(weight_19) & 
+    smoke_20 == 1
+  )
+
+# Create df from target population
+df_target <- df_LISS07 |>
+  bind_rows(
+    df_LISS08, df_LISS09, df_LISS10, df_LISS11, df_LISS12, df_LISS13,
+    df_LISS15, df_LISS16, df_LISS17, df_LISS18, df_LISS19, df_LISS20
+  ) |>
+  pivot_longer(
+    cols = -ID,
+    names_to = c("var", "time"),
+    names_sep = "_", 
+    names_transform = list(time = as.numeric)
+  ) |>
+  pivot_wider(values_from = value, names_from = var) |>
+  drop_na(smoke) |>
+  group_by(ID) |>
+  mutate(time = 0:(n() - 1)) |>
+  ungroup() |>
+  filter(time <= 3) |>
+  pivot_wider(names_from = time, values_from = c(weight:sHeart))
+
+rm(df_LISS07, df_LISS08, df_LISS09, df_LISS10, df_LISS11, df_LISS12, df_LISS13,
+   df_LISS15, df_LISS16, df_LISS17, df_LISS18, df_LISS19, df_LISS20)
+
+# Descriptive sample
+psych::describe(df_target)
+
+# Prepare sample data for analyses
+df_target_clean <- df_target |>
+  filter(is.na(weight_0) | (weight_0 > 20 & weight_0 < 155)) |>
+  filter(is.na(weight_1) | (weight_1 > 30 & weight_1 < 160)) |>
+  filter(is.na(weight_3) | (weight_3 > 30 & weight_3 < 160)) |>
+  filter(is.na(hourHPA_3) | hourHPA_3 < 168) |>
+  rowwise(ID) |>
+  mutate(
+    age = mean(c(age_0, age_1, age_2, age_3), na.rm = TRUE),
+    sex = mean(c(sex_0, sex_1, sex_2, sex_3), na.rm = TRUE) - 1,
+    comor1_0 = if_else(sum(c_across(starts_with("d") & ends_with("_0"))) == 1, 1, 0),
+    comor2_0 = if_else(sum(c_across(starts_with("d") & ends_with("_0"))) > 1, 1, 0),
+    comor1_1 = if_else(sum(c_across(starts_with("d") & ends_with("_1"))) == 1, 1, 0),
+    comor2_1 = if_else(sum(c_across(starts_with("d") & ends_with("_1"))) > 1, 1, 0),
+    comor1_2 = if_else(sum(c_across(starts_with("d") & ends_with("_2"))) == 1, 1, 0),
+    comor2_2 = if_else(sum(c_across(starts_with("d") & ends_with("_2"))) > 1, 1, 0),
+    smoke_0 = smoke_0 - 1,
+    smoke_1 = smoke_1 - 1,
+    smoke_2 = smoke_2 - 1,
+    smoke_3 = smoke_3 - 1
+  ) |>
+  ungroup() |>
+  select(
+    -contains("Cret"), 
+    -contains("Pipe"), 
+    -contains("Cigar"), 
+    -starts_with("d"),
+    -sex_0, -sex_1, -sex_2, -sex_3,
+    -age_0, -age_1, -age_2, -age_3,
+    -smoke_0, -smoke_3,
+    -hourHPA_3, -geznd_3, -sHeart_3, -alc_3
+  ) |>
+  filter(sex == 0 | sex == 1) |>
+  mutate_at(c("smoke_1", "smoke_2", "sHeart_0", "sHeart_1", "sHeart_2", "sex", 
+              "comor1_0", "comor2_0", "comor1_1", "comor2_1", "comor1_2",
+              "comor2_2"), as.factor) |>
+  mutate_at(c("geznd_0", "geznd_1", "geznd_2", "alc_0", "alc_1", "alc_2"), as.ordered)
+
+# Single imputation
+fit_imp <- mice(df_target_clean, m = 1, seed = 20230728)
+df_target_imp <- complete(fit_imp)
+summary(df_target_imp)
+
+# Export for Mplus
+factor_to_numeric <- function(f){ as.numeric(levels(f))[f] }
+
+df_target_imp |>
+  mutate_if(is.factor, factor_to_numeric) |>
+  mutate(smXco1_2 = smoke_1 * comor1_2) |>
+  utils::write.table(
+    file = "./Mplus/df_target_imp.dat",
+    sep = "\t", 
+    col.names = FALSE, 
+    row.names = FALSE, 
+    na = "-999",
+    quote = FALSE
+  )
+```
+
+# Propensity Score Model
+Propensity scores for the time-varying exposure were predicted using logistic regression, and stabilized inverse-probability-of-exposure weights were computed. Covariate imbalance was assessed before and after weighting. 
+
+Below you can also find R code for the creation of Figure 3 in the main manuscript. Labels of rows and the two facets were later manually adjusted using Adobe Acrobat Pro. 
+
+```{r example-weighting}
+# Compute inverse-probability-of-exposure weights (GLM)
+SW_smoke <- weightitMSM(
+  list(
+    smoke_1 ~ age + sex + # Baseline
+      geznd_0 + weight_0 + alc_0 + hourHPA_0 + sHeart_0 + comor1_0 + comor2_0 + # Lag 1
+      geznd_1 + weight_1 + alc_1 + hourHPA_1 + sHeart_1 + comor1_1 + comor2_1, # Lag 0
+    smoke_2 ~ age + sex + # Baseline
+      geznd_0 + weight_0 + alc_0 + hourHPA_0 + sHeart_0 + comor1_0 + comor2_0 + # Lag 2
+      geznd_1 + weight_1 + alc_1 + hourHPA_1 + sHeart_1 + comor1_1 + comor2_1 + # Lag 1
+      geznd_2 + weight_2 + alc_2 + hourHPA_2 + sHeart_2 + comor1_2 + comor2_2 # Lag 0
+  ),
+  data = df_target_imp,
+  method = "glm", 
+  stabilize = TRUE, 
+  link = "logit"
+)
+
+summary(SW_smoke)
+df_target_imp$SW_smoke <- SW_smoke$weights
+df_target_imp$PS_1 <- SW_smoke$ps.list[[1]]
+df_target_imp$PS_2 <- SW_smoke$ps.list[[2]]
+
+# Examine positivity by overlap PS distributions
+plot_PS <- df_target_imp |>
+  select(ID, starts_with("smoke"), starts_with("PS")) |>
+  mutate_at(c("smoke_1", "smoke_2"), as.numeric) |>
+  pivot_longer(
+    cols = -ID,
+    names_to = c("var", "time"),
+    names_sep = "_", 
+    names_transform = list(time = as.numeric)
+  ) |>
+  pivot_wider(values_from = value, names_from = var) |>
+  mutate(facet_time = factor(time, labels = c("Time 1", "Time 2"))) |>
+  ggplot(aes(x = PS, fill = as.factor(smoke))) +
+  geom_density(alpha = .7) +
+  facet_wrap( ~ facet_time) + 
+  theme(
+    panel.background = element_rect(fill = "white"),
+    axis.text.x = element_text(color = "black"),
+    axis.title.y = element_blank(),
+    panel.border = element_rect(fill = NA, color = "black"),
+    plot.background = element_blank(),
+    legend.background = element_blank(),
+    legend.key = element_blank(),
+    legend.position = "bottom",
+    text = element_text(size = 20)
+  ) +
+  scale_fill_discrete(name = "Exposure", labels = c("Smoking", "Quit smoking"))
+
+# Examine imbalance after reweighing
+tab_bal <- bal.tab(
+  x = list(
+    smoke_1 ~ age + sex + # Baseline
+      geznd_0 + weight_0 + alc_0 + hourHPA_0 + sHeart_0 + comor1_0 + comor2_0 + # Lag 1
+      geznd_1 + weight_1 + alc_1 + hourHPA_1 + sHeart_1 + comor1_1 + comor2_1, # Lag 0
+    smoke_2 ~ age + sex + # Baseline
+      geznd_0 + weight_0 + alc_0 + hourHPA_0 + sHeart_0 + comor1_0 + comor2_0 + # Lag 2
+      geznd_1 + weight_1 + alc_1 + hourHPA_1 + sHeart_1 + comor1_1 + comor2_1 + # Lag 1
+      geznd_2 + weight_2 + alc_2 + hourHPA_2 + sHeart_2 + comor1_2 + comor2_2 # Lag 0
+  ),
+  data = df_target_imp,
+  stats = c("m", "ks"),
+  weights = df_target_imp$SW_smoke,
+  which.time = .all, 
+  un = TRUE
+)
+
+plot_love_names <- c(
+  age = "Age (years)", 
+  sex = "Sex: male",
+  geznd_0_1 = "Health change t0: considerably poorer ",
+  geznd_0_2 = "Health change t0: somewhat poorer",
+  geznd_0_3 = "Health change t0: same ",
+  geznd_0_4 = "Health change t0: somewhat better ",
+  geznd_0_5 = "Health change t0: considerably better",
+  weight_0 = "Weight t0 (kg)",
+  alc_0_1 = "Alcohol frequency t0: daily",
+  alc_0_2 = "Alcohol frequency t0: 5/6 PW",
+  alc_0_3 = "Alcohol frequency t0: 3/4 PW",
+  alc_0_4 = "Alcohol frequency t0: 1/2 PW",
+  alc_0_5 = "Alcohol frequency t0: 1/2 PM",
+  alc_0_6 = "Alcohol frequency t0: 1 P2M",
+  alc_0_7 = "Alcohol frequency t0: 1/2 PY",
+  alc_0_8 = "Alcohol frequency t0: never",
+  hourHPA_0 = "Physical activity t0 (hours per week)",
+  sHeart_0 = "Heart problems t0: yes",
+  comor1_0 = "Comorbidity t0: 1 diagnosis",
+  comor2_0 = "Comorbidity t0: > 1 diagnoses",
+  geznd_1_1 = "Health change t1: considerably poorer",
+  geznd_1_2 = "Health change t1: somewhat poorer",
+  geznd_1_3 = "Health change t1: same ",
+  geznd_1_4 = "Health change t1: somewhat better ",
+  geznd_1_5 = "Health change t1: considerably better",
+  weight_1 = "Weight t1 (kg)",
+  alc_1_1 = "Alcohol frequency t1: daily",
+  alc_1_2 = "Alcohol frequency t1: 5/6 PW",
+  alc_1_3 = "Alcohol frequency t1: 3/4 PW",
+  alc_1_4 = "Alcohol frequency t1: 1/2 PW",
+  alc_1_5 = "Alcohol frequency t1: 1/2 PM",
+  alc_1_6 = "Alcohol frequency t1: 1 P2M",
+  alc_1_7 = "Alcohol frequency t1: 1/2 PY",
+  alc_1_8 = "Alcohol frequency t1: never",
+  hourHPA_1 = "Physical activity t1 (hours per week)",
+  sHeart_1 = "Heart problems t1: yes",
+  comor1_1 = "Comorbidity t1: 1 diagnosis",
+  comor2_1 = "Comorbidity t1: > 1 diagnoses"
+)
+
+plot_love <- love.plot(
+  x = tab_bal, 
+  drop.distance = TRUE,
+  abs = TRUE,
+  thresholds = c(m = .2),
+  var.names = plot_love_names,
+  shapes = c("triangle filled", "circle filled"),
+  sample.names = c("Unweighted", "PS weighted"),
+  line = TRUE,
+  which.time = .all,
+  colors = TRUE, 
+  stars = "raw",
+  position = "bottom"
+) +
+  labs(title = NULL) 
+```
+
+
+# Outcome Model
+A simple outcome model with only the main effects of exposure is specified to generate counterfactual predictions under "always-exposed" and "never-exposed" regimes. 95% confidence intervals were genereted using bootstrapping. 
+
+```{r example-outcome}
+# Bootstrap function for IPW-regression of MSM
+fn_boot <- function(data, i) {
+  df_boot <- data[i,]
+  
+  # PS weighting for exposure
+  SW_smoke <- weightitMSM(
+    list(
+      smoke_1 ~ age + sex + # Baseline
+      geznd_0 + weight_0 + alc_0 + hourHPA_0 + sHeart_0 + comor1_0 + comor2_0 + # Lag 1
+      geznd_1 + weight_1 + alc_1 + hourHPA_1 + sHeart_1 + comor1_1 + comor2_1, # Lag 0
+    smoke_2 ~ age + sex + # Baseline
+      geznd_0 + weight_0 + alc_0 + hourHPA_0 + sHeart_0 + comor1_0 + comor2_0 + # Lag 2
+      geznd_1 + weight_1 + alc_1 + hourHPA_1 + sHeart_1 + comor1_1 + comor2_1 + # Lag 1
+      geznd_2 + weight_2 + alc_2 + hourHPA_2 + sHeart_2 + comor1_2 + comor2_2 # Lag 0
+    ),
+    data = df_boot,
+    method = "glm", 
+    stabilize = TRUE, 
+    link = "logit"
+  )
+  
+  # Bring weights into the dataset
+  df_boot$weights <- SW_smoke$weights
+  
+  # Fit outcome model
+  fit <- glm(
+    formula = weight_3 ~ smoke_1 + smoke_2,
+    data = df_boot, 
+    weights = weights
+  )
+  
+  return(
+    c(
+      coef(fit)["smoke_11"],
+      coef(fit)["smoke_21"],
+      coef(fit)["smoke_11"] + coef(fit)["smoke_21"]
+    )
+  )
+}
+
+# Perform bootstrap
+set.seed(20230725)
+out_boot <- boot(df_target_imp, fn_boot, R = 999)
+out_boot
+boot.ci(out_boot, type = "perc", index = 3)
+```

@@ -1,0 +1,669 @@
+Mplus VERSION 8.11
+MUTHEN & MUTHEN
+01/13/2025   5:08 PM
+
+INPUT INSTRUCTIONS
+
+  TITLE:
+     Traditional path analysis for estimating joint effects
+     and prolongued exposure effect.
+     - K = 2 (waves)
+     - All effects assumed linear
+
+  DATA:
+      FILE = repList_condition26.dat;
+      TYPE = MONTECARLO;
+
+  VARIABLE:
+      NAMES = C0 L1 A1 L2 A2 Y
+              Pr_A1 Pr_A2 ps1 ps2 W W_correct;
+      USEVARIABLES = C0-Y;
+      MISSING = .;
+      CATEGORICAL = A1 A2;
+
+  ANALYSIS:
+     ESTIMATOR = ML;
+     LINK = PROBIT;
+
+  MODEL:
+      ! Lagged effects on Y
+      Y ON A1*0.2 A2*0.4 (B_A1Y B_A2Y);
+      Y ON L1*0.15 L2*0.3 (B_L1Y B_L2Y);
+      Y ON C0*0.1 (B_C0Y);
+
+      ! Lagged effects on L
+      L2 ON L1*0.3 A1*0.4 C0*0.1 (B_L1L2 B_A1L2 B_C0L2);
+      L1 ON C0*0.1;
+
+      ! Lagged effects on A
+      A2 ON C0 A1 L1 L2;
+      A1 ON C0 L1;
+
+      ! Variance
+      C0;
+
+      ! Residual variances
+      L1 L2 Y;
+
+      ! Thresholds
+      [A1$1 A2$1] (tau1 tau2);
+
+  MODEL CONSTRAINT:
+      NEW(JTE_A1*0.32);
+      JTE_A1 = B_A1L2*B_L2Y + B_A1Y;
+
+      NEW(AvN*0.72);
+      AvN = JTE_A1 + B_A2Y;
+
+  SAVEDATA:
+      RESULTS = results_condition26.dat;
+
+
+
+INPUT READING TERMINATED NORMALLY
+
+
+
+
+Traditional path analysis for estimating joint effects
+and prolongued exposure effect.
+- K = 2 (waves)
+- All effects assumed linear
+
+SUMMARY OF ANALYSIS
+
+Number of groups                                                 1
+Average number of observations                                 500
+
+Number of replications
+    Requested                                                 1000
+    Completed                                                 1000
+
+Number of dependent variables                                    5
+Number of independent variables                                  1
+Number of continuous latent variables                            0
+
+Observed dependent variables
+
+  Continuous
+   L1          L2          Y
+
+  Binary and ordered categorical (ordinal)
+   A1          A2
+
+Observed independent variables
+   C0
+
+
+Estimator                                                       ML
+Information matrix                                        OBSERVED
+Optimization Specifications for the Quasi-Newton Algorithm for
+Continuous Outcomes
+  Maximum number of iterations                                 100
+  Convergence criterion                                  0.100D-05
+Optimization Specifications for the EM Algorithm
+  Maximum number of iterations                                 500
+  Convergence criteria
+    Loglikelihood change                                 0.100D-02
+    Relative loglikelihood change                        0.100D-05
+    Derivative                                           0.100D-02
+Optimization Specifications for the M step of the EM Algorithm for
+Categorical Latent variables
+  Number of M step iterations                                    1
+  M step convergence criterion                           0.100D-02
+  Basis for M step termination                           ITERATION
+Optimization Specifications for the M step of the EM Algorithm for
+Censored, Binary or Ordered Categorical (Ordinal), Unordered
+Categorical (Nominal) and Count Outcomes
+  Number of M step iterations                                    1
+  M step convergence criterion                           0.100D-02
+  Basis for M step termination                           ITERATION
+  Maximum value for logit thresholds                            10
+  Minimum value for logit thresholds                           -10
+  Minimum expected cell size for chi-square              0.100D-01
+Maximum number of iterations for H1                           2000
+Convergence criterion for H1                             0.100D-03
+Optimization algorithm                                         EMA
+Integration Specifications
+  Type                                                    STANDARD
+  Number of integration points                                  15
+  Dimensions of numerical integration                            0
+  Adaptive quadrature                                           ON
+Link                                                        PROBIT
+Cholesky                                                        ON
+
+Input data file(s)
+  Multiple data files from
+    repList_condition26.dat
+Input data format  FREE
+
+
+SUMMARY OF DATA FOR THE FIRST REPLICATION
+
+     Number of missing data patterns             1
+     Number of y missing data patterns           1
+     Number of u missing data patterns           1
+
+
+SUMMARY OF MISSING DATA PATTERNS FOR THE FIRST REPLICATION
+
+
+     MISSING DATA PATTERNS FOR Y (x = not missing)
+
+           1
+ L1        x
+ L2        x
+ Y         x
+ C0        x
+
+
+     MISSING DATA PATTERN FREQUENCIES FOR Y
+
+    Pattern   Frequency
+          1         500
+
+
+COVARIANCE COVERAGE OF DATA FOR THE FIRST REPLICATION
+
+Minimum covariance coverage value   0.100
+
+
+     PROPORTION OF DATA PRESENT FOR Y
+
+
+           Covariance Coverage
+              L1            L2            Y             C0
+              ________      ________      ________      ________
+ L1             1.000
+ L2             1.000         1.000
+ Y              1.000         1.000         1.000
+ C0             1.000         1.000         1.000         1.000
+
+
+UNIVARIATE PROPORTIONS FOR CATEGORICAL VARIABLES
+
+NOTE:  These are average results over 1000 data sets.
+
+    A1
+      Category 1    0.499
+      Category 2    0.501
+    A2
+      Category 1    0.500
+      Category 2    0.500
+
+
+SAMPLE STATISTICS
+
+NOTE:  These are average results over 1000 data sets.
+
+
+     SAMPLE STATISTICS
+
+
+           Means
+              L1            L2            Y             C0
+              ________      ________      ________      ________
+                1.400         2.020         1.518         4.001
+
+
+           Covariances
+              L1            L2            Y             C0
+              ________      ________      ________      ________
+ L1             1.006
+ L2             0.349         1.167
+ Y              0.317         0.495         1.306
+ C0             0.098         0.146         0.181         0.994
+
+
+           Correlations
+              L1            L2            Y             C0
+              ________      ________      ________      ________
+ L1             1.000
+ L2             0.323         1.000
+ Y              0.276         0.401         1.000
+ C0             0.098         0.135         0.159         1.000
+
+
+
+
+MODEL FIT INFORMATION
+
+Number of Free Parameters                       25
+
+Loglikelihood
+
+    H0 Value
+
+        Mean                             -3478.625
+        Std Dev                             32.243
+        Number of successful computations     1000
+
+             Proportions                   Percentiles
+        Expected    Observed         Expected       Observed
+           0.990       0.991        -3553.631      -3553.226
+           0.980       0.982        -3544.842      -3542.500
+           0.950       0.942        -3531.661      -3533.651
+           0.900       0.892        -3519.947      -3522.010
+           0.800       0.804        -3505.761      -3505.405
+           0.700       0.701        -3495.533      -3495.472
+           0.500       0.506        -3478.625      -3478.295
+           0.300       0.294        -3461.717      -3462.361
+           0.200       0.204        -3451.490      -3451.142
+           0.100       0.104        -3437.303      -3436.711
+           0.050       0.056        -3425.590      -3423.862
+           0.020       0.019        -3412.409      -3413.501
+           0.010       0.009        -3403.619      -3404.441
+
+Information Criteria
+
+    Akaike (AIC)
+
+        Mean                              7007.251
+        Std Dev                             64.485
+        Number of successful computations     1000
+
+             Proportions                   Percentiles
+        Expected    Observed         Expected       Observed
+           0.990       0.991         6857.239       6857.863
+           0.980       0.981         6874.818       6875.759
+           0.950       0.944         6901.179       6896.900
+           0.900       0.896         6924.607       6923.159
+           0.800       0.796         6952.980       6952.138
+           0.700       0.706         6973.435       6974.238
+           0.500       0.494         7007.251       7006.545
+           0.300       0.299         7041.067       7040.697
+           0.200       0.196         7061.521       7059.582
+           0.100       0.108         7089.895       7093.462
+           0.050       0.058         7113.322       7116.888
+           0.020       0.018         7139.684       7134.215
+           0.010       0.009         7157.262       7149.214
+
+    Bayesian (BIC)
+
+        Mean                              7112.616
+        Std Dev                             64.485
+        Number of successful computations     1000
+
+             Proportions                   Percentiles
+        Expected    Observed         Expected       Observed
+           0.990       0.991         6962.604       6963.228
+           0.980       0.981         6980.183       6981.124
+           0.950       0.944         7006.544       7002.265
+           0.900       0.896         7029.972       7028.524
+           0.800       0.796         7058.345       7057.503
+           0.700       0.706         7078.800       7079.603
+           0.500       0.494         7112.616       7111.910
+           0.300       0.299         7146.432       7146.063
+           0.200       0.196         7166.886       7164.947
+           0.100       0.108         7195.260       7198.827
+           0.050       0.058         7218.687       7222.253
+           0.020       0.018         7245.049       7239.580
+           0.010       0.009         7262.627       7254.579
+
+    Sample-Size Adjusted BIC (n* = (n + 2) / 24)
+
+        Mean                              7033.264
+        Std Dev                             64.485
+        Number of successful computations     1000
+
+             Proportions                   Percentiles
+        Expected    Observed         Expected       Observed
+           0.990       0.991         6883.253       6883.877
+           0.980       0.981         6900.831       6901.773
+           0.950       0.944         6927.193       6922.914
+           0.900       0.896         6950.620       6949.173
+           0.800       0.796         6978.994       6978.152
+           0.700       0.706         6999.448       7000.251
+           0.500       0.494         7033.264       7032.559
+           0.300       0.299         7067.080       7066.711
+           0.200       0.196         7087.535       7085.596
+           0.100       0.108         7115.908       7119.476
+           0.050       0.058         7139.336       7142.902
+           0.020       0.018         7165.697       7160.228
+           0.010       0.009         7183.276       7175.227
+
+
+
+MODEL RESULTS
+
+                              ESTIMATES              S. E.     M. S. E.  95%  % Sig
+                 Population   Average   Std. Dev.   Average             Cover Coeff
+
+ Y          ON
+  A1                  0.200     0.2046     0.0956     0.0950     0.0092 0.949 0.588
+  A2                  0.400     0.3945     0.0918     0.0948     0.0084 0.950 0.988
+  L1                  0.150     0.1471     0.0481     0.0476     0.0023 0.941 0.872
+  L2                  0.300     0.3013     0.0449     0.0453     0.0020 0.953 1.000
+  C0                  0.100     0.1013     0.0439     0.0454     0.0019 0.965 0.616
+
+ L2         ON
+  L1                  0.300     0.3005     0.0462     0.0454     0.0021 0.944 1.000
+  A1                  0.400     0.3958     0.0945     0.0909     0.0089 0.942 0.987
+  C0                  0.100     0.1040     0.0438     0.0450     0.0019 0.951 0.628
+
+ L1         ON
+  C0                  0.100     0.0985     0.0444     0.0448     0.0020 0.956 0.583
+
+ A2         ON
+  C0                  0.000     0.0521     0.0597     0.0595     0.0063 0.862 0.138
+  A1                  0.000     0.5617     0.1187     0.1197     0.3296 0.000 1.000
+  L1                  0.000     0.1115     0.0615     0.0624     0.0162 0.567 0.433
+  L2                  0.000     0.1959     0.0604     0.0589     0.0420 0.087 0.913
+
+ A1         ON
+  C0                  0.000     0.0612     0.0583     0.0575     0.0071 0.819 0.181
+  L1                  0.000     0.2344     0.0583     0.0579     0.0583 0.019 0.981
+
+ Means
+  C0                  4.029     4.0009     0.0434     0.0446     0.0027 0.907 1.000
+
+ Intercepts
+  L1                  1.422     1.0058     0.1846     0.1846     0.2069 0.407 1.000
+  L2                  2.020     0.9849     0.1869     0.1915     1.1061 0.000 0.998
+  Y                   1.548    -0.0020     0.1909     0.1973     2.4385 0.000 0.041
+
+ Thresholds
+  A1$1                0.085     0.5659     0.2474     0.2434     0.2928 0.496 0.649
+  A2$1               -0.013     1.0360     0.2650     0.2608     1.1713 0.025 0.973
+
+ Variances
+  C0                  0.500     0.9937     0.0621     0.0628     0.2476 0.000 1.000
+
+ Residual Variances
+  L1                  0.500     0.9947     0.0634     0.0629     0.2487 0.000 1.000
+  L2                  0.500     0.9886     0.0612     0.0625     0.2425 0.000 1.000
+  Y                   0.500     0.9894     0.0623     0.0626     0.2434 0.000 1.000
+
+New/Additional Parameters
+  JTE_A1              0.320     0.3238     0.0995     0.0978     0.0099 0.948 0.898
+  AVN                 0.720     0.7182     0.1193     0.1192     0.0142 0.952 1.000
+
+
+QUALITY OF NUMERICAL RESULTS
+
+     Average Condition Number for the Information Matrix      0.717E-04
+       (ratio of smallest to largest eigenvalue)
+
+
+TECHNICAL 1 OUTPUT
+
+
+     PARAMETER SPECIFICATION
+
+
+           TAU
+              A1$1          A2$1
+              ________      ________
+                   24            25
+
+
+           NU
+              A1            A2            L1            L2            Y
+              ________      ________      ________      ________      ________
+                    0             0             0             0             0
+
+
+           NU
+              C0
+              ________
+                    0
+
+
+           LAMBDA
+              A1            A2            L1            L2            Y
+              ________      ________      ________      ________      ________
+ A1                 0             0             0             0             0
+ A2                 0             0             0             0             0
+ L1                 0             0             0             0             0
+ L2                 0             0             0             0             0
+ Y                  0             0             0             0             0
+ C0                 0             0             0             0             0
+
+
+           LAMBDA
+              C0
+              ________
+ A1                 0
+ A2                 0
+ L1                 0
+ L2                 0
+ Y                  0
+ C0                 0
+
+
+           THETA
+              A1            A2            L1            L2            Y
+              ________      ________      ________      ________      ________
+ A1                 0
+ A2                 0             0
+ L1                 0             0             0
+ L2                 0             0             0             0
+ Y                  0             0             0             0             0
+ C0                 0             0             0             0             0
+
+
+           THETA
+              C0
+              ________
+ C0                 0
+
+
+           ALPHA
+              A1            A2            L1            L2            Y
+              ________      ________      ________      ________      ________
+                    0             0             1             2             3
+
+
+           ALPHA
+              C0
+              ________
+                    4
+
+
+           BETA
+              A1            A2            L1            L2            Y
+              ________      ________      ________      ________      ________
+ A1                 0             0             5             0             0
+ A2                 7             0             8             9             0
+ L1                 0             0             0             0             0
+ L2                12             0            13             0             0
+ Y                 15            16            17            18             0
+ C0                 0             0             0             0             0
+
+
+           BETA
+              C0
+              ________
+ A1                 6
+ A2                10
+ L1                11
+ L2                14
+ Y                 19
+ C0                 0
+
+
+           PSI
+              A1            A2            L1            L2            Y
+              ________      ________      ________      ________      ________
+ A1                 0
+ A2                 0             0
+ L1                 0             0            20
+ L2                 0             0             0            21
+ Y                  0             0             0             0            22
+ C0                 0             0             0             0             0
+
+
+           PSI
+              C0
+              ________
+ C0                23
+
+
+     PARAMETER SPECIFICATION FOR THE ADDITIONAL PARAMETERS
+
+
+           NEW/ADDITIONAL PARAMETERS
+              JTE_A1        AVN
+              ________      ________
+                   26            27
+
+
+     STARTING VALUES
+
+
+           TAU
+              A1$1          A2$1
+              ________      ________
+                0.085        -0.013
+
+
+           NU
+              A1            A2            L1            L2            Y
+              ________      ________      ________      ________      ________
+                0.000         0.000         0.000         0.000         0.000
+
+
+           NU
+              C0
+              ________
+                0.000
+
+
+           LAMBDA
+              A1            A2            L1            L2            Y
+              ________      ________      ________      ________      ________
+ A1             1.000         0.000         0.000         0.000         0.000
+ A2             0.000         1.000         0.000         0.000         0.000
+ L1             0.000         0.000         1.000         0.000         0.000
+ L2             0.000         0.000         0.000         1.000         0.000
+ Y              0.000         0.000         0.000         0.000         1.000
+ C0             0.000         0.000         0.000         0.000         0.000
+
+
+           LAMBDA
+              C0
+              ________
+ A1             0.000
+ A2             0.000
+ L1             0.000
+ L2             0.000
+ Y              0.000
+ C0             1.000
+
+
+           THETA
+              A1            A2            L1            L2            Y
+              ________      ________      ________      ________      ________
+ A1             0.000
+ A2             0.000         0.000
+ L1             0.000         0.000         0.000
+ L2             0.000         0.000         0.000         0.000
+ Y              0.000         0.000         0.000         0.000         0.000
+ C0             0.000         0.000         0.000         0.000         0.000
+
+
+           THETA
+              C0
+              ________
+ C0             0.000
+
+
+           ALPHA
+              A1            A2            L1            L2            Y
+              ________      ________      ________      ________      ________
+                0.000         0.000         1.422         2.020         1.548
+
+
+           ALPHA
+              C0
+              ________
+                4.029
+
+
+           BETA
+              A1            A2            L1            L2            Y
+              ________      ________      ________      ________      ________
+ A1             0.000         0.000         0.000         0.000         0.000
+ A2             0.000         0.000         0.000         0.000         0.000
+ L1             0.000         0.000         0.000         0.000         0.000
+ L2             0.400         0.000         0.300         0.000         0.000
+ Y              0.200         0.400         0.150         0.300         0.000
+ C0             0.000         0.000         0.000         0.000         0.000
+
+
+           BETA
+              C0
+              ________
+ A1             0.000
+ A2             0.000
+ L1             0.100
+ L2             0.100
+ Y              0.100
+ C0             0.000
+
+
+           PSI
+              A1            A2            L1            L2            Y
+              ________      ________      ________      ________      ________
+ A1             1.000
+ A2             0.000         1.000
+ L1             0.000         0.000         0.500
+ L2             0.000         0.000         0.000         0.500
+ Y              0.000         0.000         0.000         0.000         0.500
+ C0             0.000         0.000         0.000         0.000         0.000
+
+
+           PSI
+              C0
+              ________
+ C0             0.500
+
+
+     STARTING VALUES FOR THE ADDITIONAL PARAMETERS
+
+
+           NEW/ADDITIONAL PARAMETERS
+              JTE_A1        AVN
+              ________      ________
+                0.320         0.720
+
+
+RESULTS SAVING INFORMATION
+
+  Order of data
+
+    Replication number
+    Parameter estimates
+     (saved in order shown in Technical 1 output)
+    Standard errors
+     (saved in order shown in Technical 1 output)
+    Number of Free Parameters
+    H0 Loglikelihood
+    Akaike (AIC)
+    Bayesian (BIC)
+    Sample-Size Adjusted BIC
+    Entropy
+    Condition Number
+
+  Save file
+    results_condition26.dat
+
+  Save file format           Free
+
+
+     Beginning Time:  17:08:40
+        Ending Time:  17:09:40
+       Elapsed Time:  00:01:00
+
+
+
+MUTHEN & MUTHEN
+3463 Stoner Ave.
+Los Angeles, CA  90066
+
+Tel: (310) 391-9971
+Fax: (310) 391-8971
+Web: www.StatModel.com
+Support: Support@StatModel.com
+
+Copyright (c) 1998-2024 Muthen & Muthen

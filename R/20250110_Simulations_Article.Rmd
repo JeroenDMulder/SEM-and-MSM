@@ -1,0 +1,1137 @@
+---
+title: "R code for Simulation Study of Mulder, Luijken, Penning de Vries, and Hamaker (2024)"
+author: "Jeroen D. Mulder and Kim Luijken"
+date: "01-12-2025"
+---
+
+This .Rmd-file is part of the online supplementary materials of Mulder, Luijken, Penning de Vries and Hamaker (2024). It contains the R code that was used for the simulation study of the main paper. 
+
+```{r setup, message=FALSE}
+# Packages: Data 
+library(tidyverse)
+
+# Packages: Simulation
+library(furrr) # Multicore processing
+library(progressr)
+```
+
+# Data Generation
+
+The causal model that serves as a data generating model is illustrated in Figures 4 and 5 of the main paper.
+
+```{r data-generation, eval = FALSE}
+# Function to simulate data 
+## Population parameter values: B0_ = intercept, B_ = linear effect, 
+## B2_ = quadratic effect, Bx_ = interaction effect
+simulate_data <- function(
+    sample_size, params_funcForm, params_prop_exposed, 
+    # Wave 1
+    B0_L1 = 1, B_C0L1 = 0.1, B2_C0L1 = 0,
+    B0_A1 = 0, B_C0A1 = 0.1, B_L1A1 = 0.5, B2_L1A1 = 0, 
+    # Wave 2
+    B0_L2 = 1, B_L1L2 = 0.3, B_A1L2 = 0.4, B_C0L2 = 0.1, 
+      B2_C0L2 = 0, B2_L1L2 = 0,
+    B0_A2 = -.545, B_A1A2 = 0.8, B_L1A2 = 0.25, B_L2A2 = 0.5, B_C0A2 = 0.1,
+      B2_L1A2 = 0, B2_L2A2 = 0,
+    # Outcome
+    B0_Y = 0, B_L2Y = 0.3, B_L1Y = 0.15, B_A2Y = 0.4, B_A1Y = 0.2, B_C0Y = 0.1,
+      B2_L1Y = 0, B2_L2Y = 0, B2_C0Y = 0
+) { 
+
+  # Set (mis)specified population values
+  eval(parse(text = params_funcForm))  
+  
+  # Set intercepts exposure model for proportion exposed
+  eval(parse(text = params_prop_exposed))
+
+  # Simulate data
+  C0 <- rnorm(sample_size, mean = 4)
+ 
+  L1 <- B0_L1 + # Intercept
+    B_C0L1 * C0 + # Linear
+    B2_C0L1 * I((C0 - mean(C0))^2) + # Quadratic 
+    rnorm(sample_size)
+  
+  Pr_A1 <- plogis(
+    B0_A1 + # Intercept
+    B_C0A1 * C0 + B_L1A1 * L1 + # Linear 
+    B2_L1A1 * I((L1 - mean(L1))^2) # Quadratic 
+  )
+  
+  A1 <- rbinom(n = sample_size, size = 1, prob = Pr_A1) 
+  
+  L2 <- B0_L2 + # Intercept
+    B_L1L2 * L1 + B_A1L2 * A1 + B_C0L2 * C0 + # Linear 
+    B2_C0L2 * I((C0 - mean(C0))^2) + B2_L1L2 * I((L1 - mean(L1))^2) + # Quadratic
+    rnorm(sample_size)
+  
+  Pr_A2 <- plogis(
+    B0_A2 + # Intercept
+    B_L1A2 * L1 + B_A1A2 * A1 + B_L2A2 * L2 + B_C0A2 * C0 + # Linear 
+    B2_L1A2 * I((L1 - mean(L1))^2) + B2_L2A2 * I((L2 - mean(L2))^2) # Quadratic
+  )
+  
+  A2 <- rbinom(n = sample_size, size = 1, prob = Pr_A2)
+
+  Y <- B0_Y + # Intercept
+    B_L2Y * L2 + B_L1Y * L1 + B_A2Y * A2 + B_A1Y * A1 + B_C0Y * C0 + # Linear 
+    B2_L1Y * I((L1 - mean(L1))^2) + B2_L2Y * I((L2 - mean(L2))^2) + # Quadratic 
+      B2_C0Y * I((C0 - mean(C0))^2) + 
+    rnorm(sample_size)
+  
+  df <- data.frame(
+    C0 = C0, 
+    L1 = as.numeric(L1), 
+    A1 = as.numeric(A1), 
+    L2 = as.numeric(L2), 
+    A2 = as.numeric(A2), 
+    Y = as.numeric(Y), 
+    Pr_A1 = Pr_A1, 
+    Pr_A2 = Pr_A2
+  )
+
+  return(df)
+}
+
+# Function to check ACE in simulated data
+check_pv <- function(
+    sample_size, params_funcForm, params_prop_exposed,
+    # Wave 1
+    B0_L1 = 0, B_C0L1 = 0.1, B2_C0L1 = 0,
+    # Wave 2
+    B0_L2 = 0, B_L1L2 = 0.3, B_A1L2 = 0.4, B_C0L2 = 0.1, 
+      B2_C0L2 = 0, B2_L1L2 = 0,
+    # Outcome
+    B0_Y = 0, B_L2Y = 0.3, B_L1Y = 0.15, B_A2Y = 0.4, B_A1Y = 0.2, B_C0Y = 0.1,
+      B2_L1Y = 0, B2_L2Y = 0, B2_C0Y = 0
+) { 
+  
+  # Set (mis)specified population values
+  eval(parse(text = params_funcForm))  
+  
+  # Set intercepts exposure model for proportion exposed
+  eval(parse(text = params_prop_exposed))
+
+  # Simulate data
+  C0 <- rnorm(sample_size, mean = 4)
+  
+  L1 <- B0_L1 + # Intercept
+    B_C0L1 * C0 + # Linear
+    B2_C0L1 * I((C0 - mean(C0))^2) + # Quadratic 
+    rnorm(sample_size)
+  
+  L2_0 <- B0_L2 + # Intercept
+    B_L1L2 * L1 + B_A1L2 * 0 + B_C0L2 * C0 + # Linear 
+    B2_C0L2 * I((C0 - mean(C0))^2) + B2_L1L2 * I((L1 - mean(L1))^2) + # Quadratic
+    rnorm(sample_size)
+  
+  L2_1 <- B0_L2 + # Intercept
+    B_L1L2 * L1 + B_A1L2 * 1 + B_C0L2 * C0 + # Linear 
+    B2_C0L2 * I((C0 - mean(C0))^2) + B2_L1L2 * I((L1 - mean(L1))^2) + # Quadratic
+    rnorm(sample_size)
+
+  Y_0_joint <- B0_Y + # Intercept
+    B_L2Y * L2_0 + B_L1Y * L1 + B_A2Y * 0 + B_A1Y * 0 + B_C0Y * C0 + # Linear 
+    B2_L1Y * I((L1 - mean(L1))^2) + B2_L2Y * I((L2_0 - mean(L2_0))^2) + # Quadratic 
+      B2_C0Y * I((C0 - mean(C0))^2) + 
+    rnorm(sample_size)
+  
+  Y_1_joint <- B0_Y + # Intercept
+    B_L2Y * L2_1 + B_L1Y * L1 + B_A2Y * 0 + B_A1Y * 1 + B_C0Y * C0 + # Linear 
+    B2_L1Y * I((L1 - mean(L1))^2) + B2_L2Y * I((L2_1 - mean(L2_1))^2) + # Quadratic 
+      B2_C0Y * I((C0 - mean(C0))^2) + 
+    rnorm(sample_size)
+  
+  Y_0_AvN <- B0_Y + # Intercept
+    B_L2Y * L2_0 + B_L1Y * L1 + B_A2Y * 0 + B_A1Y * 0 + B_C0Y * C0 + # Linear 
+    B2_L1Y * I((L1 - mean(L1))^2) + B2_L2Y * I((L2_0 - mean(L2_0))^2) + # Quadratic 
+    B2_C0Y * I((C0 - mean(C0))^2) + 
+    rnorm(sample_size)
+  
+  Y_1_AvN <- B0_Y + # Intercept
+    B_L2Y * L2_1 + B_L1Y * L1 + B_A2Y * 1 + B_A1Y * 1 + B_C0Y * C0 + # Linear 
+    B2_L1Y * I((L1 - mean(L1))^2) + B2_L2Y * I((L2_1 - mean(L2_1))^2) + # Quadratic 
+    B2_C0Y * I((C0 - mean(C0))^2) + 
+    rnorm(sample_size)
+  
+  return(data.frame(
+    PV_joint = mean(Y_1_joint - Y_0_joint),
+    PV_AvN = mean(Y_1_AvN- Y_0_AvN)
+  ))
+}
+
+```
+
+
+# Inverse-Probability-of-Exposure-Weighting
+Propensity scores for the time-varying exposure were predicted using logistic regression, and stabilized inverse-probability-of-exposure weights were computed.
+
+```{r simulation-weights, eval = FALSE}
+# Compute inverse probability of exposure weights
+compute_weights <- function(x, m_A1_correct, m_A2_correct) {
+
+  # Compute probability of treatment conditional on covariates
+  fit_ps1 <- glm(A1 ~ C0 + L1, data = x, family = "binomial")
+  ps1_den <- predict(fit_ps1, type = "response")
+  warn_zeroOne_ps1_den <- any(ps1_den == 0 | ps1_den == 1) # Flag for predicted probabilities of 0 or 1
+  
+  fit_ps2 <- glm(A2 ~ C0 + L1 + A1 + L2, data = x, family = "binomial")
+  ps2_den <- predict(fit_ps2, type = "response")
+  warn_zeroOne_ps2_den <- any(ps2_den == 0 | ps2_den == 1)
+  
+  fit_ps1_correct <- glm(as.formula(m_A1_correct), data = x, family = "binomial")
+  ps1_den_correct <- predict(fit_ps1_correct, type = "response")
+  warn_zeroOne_ps1_den_correct <- any(ps1_den_correct == 0 | ps1_den_correct == 1)
+  
+  fit_ps2_correct <- glm(as.formula(m_A2_correct), data = x, family = "binomial")
+  ps2_den_correct <- predict(fit_ps2_correct, type = "response")
+  warn_zeroOne_ps2_den_correct <- any(ps2_den_correct == 0 | ps2_den_correct == 1)
+    
+  # Compute probability of treatment conditional on treatment history
+  fit_ps1_num <- glm(A1 ~ 1, data = x, family = "binomial")
+  ps1_num <- predict(fit_ps1_num, type = "response") 
+  warn_zeroOne_ps1_num <- any(ps1_num == 0 | ps1_num == 1)
+  
+  fit_ps2_num <- glm(A2 ~ A1, data = x, family = "binomial")
+  ps2_num <- predict(fit_ps2_num, type = "response") 
+  warn_zeroOne_ps2_num <- any(ps2_num == 0 | ps2_num == 1)
+    
+  # Compute stabilized inverse probability weights 
+  ipw1 <- x$A1 * (ps1_num / ps1_den) + (1 - x$A1) * ((1 - ps1_num) / (1 - ps1_den))
+  ipw2 <- x$A2 * (ps2_num / ps2_den) + (1 - x$A2) * ((1 - ps2_num) / (1 - ps2_den))
+    
+  ipw1_correct <- x$A1 * (ps1_num / ps1_den_correct) + (1 - x$A1) * ((1 - ps1_num) / (1 - ps1_den_correct))
+  ipw2_correct <- x$A2 * (ps2_num / ps2_den_correct) + (1 - x$A2) * ((1 - ps2_num) / (1 - ps2_den_correct))
+  
+  # Compute stabilized weights
+  W <- ipw1 * ipw2
+  W_correct <- ipw1_correct * ipw2_correct
+  out <- list(
+    W = W, W_correct = W_correct, 
+    warn_zeroOne_ps1_den = warn_zeroOne_ps1_den, 
+    warn_zeroOne_ps2_den = warn_zeroOne_ps2_den, 
+    warn_zeroOne_ps1_den_correct = warn_zeroOne_ps1_den_correct,
+    warn_zeroOne_ps2_den_correct = warn_zeroOne_ps2_den_correct, 
+    warn_zeroOne_ps1_num = warn_zeroOne_ps1_num, 
+    warn_zeroOne_ps2_num = warn_zeroOne_ps2_num
+  )
+  
+  return(out)
+}
+
+```
+
+# Run Single Simulation Condition
+The main paper compares five methods for assessing the "always-exposed versus never-exposed" effect. The below R code uses `simulate_data()` to generate data and analyses the data using the five methods. Results are extracted from the model and performance measures are computed. 
+
+```{r simulation-run-condition, eval = F}
+# Function to run simulations for single condition
+run_condition <- function(condition, n_reps, p, save_folder) {
+
+  # Extract information
+  sample_size <- as.numeric(condition["sample_size"])
+  id_condition <- as.numeric(condition["id_condition"])
+  id_funcForm <- as.numeric(condition["id_funcForm"])
+  PV_A1 <- as.numeric(condition["PV_A1"])
+  PV_AvN <- as.numeric(condition["PV_AvN"])
+  
+  # Memory allocation
+  df_IPW_AvN <- df_regression_AvN <- df_IPW_correct_AvN <- 
+    data.frame(
+      matrix(
+        data = NA, 
+        ncol = 2, 
+        nrow = n_reps, 
+        dimnames = list(NULL, c("PV","est"))
+      )
+    ) 
+  
+  df_prop_exposed <- data.frame(
+    matrix(
+      data = NA,
+      ncol = 2,
+      nrow = n_reps,
+      dimnames = list(NULL, c("n_exposed_A1", "n_exposed_A2"))
+    )
+  )
+  
+  df_prop_exposed$id_funcForm <- id_funcForm
+  df_prop_exposed$sample_size <- sample_size
+  df_prop_exposed$target_prop_exposed <- as.numeric(condition["prop_exposed"])
+  
+  warn_zeroOne_ps1_den <- warn_zeroOne_ps2_den <- 
+    warn_zeroOne_ps1_den_correct <- warn_zeroOne_ps2_den_correct <- 
+    warn_zeroOne_ps1_num <- warn_zeroOne_ps2_num <- logical(n_reps) 
+  
+  # Create folder for data save
+  save_path <- file.path(getwd(), save_folder, paste0("condition", id_condition))
+  dir.create(save_path)
+  
+  # Replications
+  for (i in 1:n_reps) {
+    
+    # Fill in population values
+    df_IPW_AvN[i, "PV"] <- df_regression_AvN[i, "PV"] <- df_IPW_correct_AvN[i, "PV"] <- PV_AvN
+    
+    # Simulate data
+    df_dat <- simulate_data(sample_size, 
+      params_funcForm = condition[["funcForm"]],
+      params_prop_exposed = condition[["prop_exposed_funcForm"]]
+    ) 
+    
+    # Compute weights
+    df_weights <- compute_weights(
+      x = df_dat,
+      m_A1_correct = condition[["m_A1_correct"]],
+      m_A2_correct = condition[["m_A2_correct"]]
+    )
+    df_dat$W <- df_weights[["W"]]
+    df_dat$W_correct <- df_weights[["W_correct"]]
+    
+    # Extract potential warnings from predicting exposure
+    warn_zeroOne_ps1_den[i] <- df_weights[["warn_zeroOne_ps1_den"]]
+    warn_zeroOne_ps2_den[i] <- df_weights[["warn_zeroOne_ps2_den"]] 
+    warn_zeroOne_ps1_den_correct[i] <- df_weights[["warn_zeroOne_ps1_den_correct"]]
+    warn_zeroOne_ps2_den_correct[i] <- df_weights[["warn_zeroOne_ps2_den_correct"]] 
+    warn_zeroOne_ps1_num[i] <- df_weights[["warn_zeroOne_ps1_num"]]
+    warn_zeroOne_ps2_num[i] <- df_weights[["warn_zeroOne_ps2_num"]]
+    
+    # Save data
+    utils::write.table(df_dat, 
+      file = file.path(save_path, paste0("df", i, "_condition", id_condition, ".dat")),
+      sep = "\t", col.names = FALSE, row.names = FALSE, na = "-999"
+    )
+    
+    # Fill in proportion exposed in sample
+    df_prop_exposed[i, "n_exposed_A1"] <- sum(df_dat$A1) / sample_size
+    df_prop_exposed[i, "n_exposed_A2"] <- sum(df_dat$A2) / sample_size
+    
+    # Fit models
+    fit_IPW <- tryCatch(
+      {
+        glm(Y ~ A1 + A2, data = df_dat, weights = W)
+      },
+      error = function(e) {
+        df_IPW_A1[i, "error"] <<- TRUE
+        df_IPW_AvN[i, "error"] <<- TRUE
+      }
+    )
+      
+    fit_regression <- tryCatch(
+      {
+        lm(Y ~ A1 + A2, data = df_dat)
+      },
+      error = function(e) {
+        df_regression_A1[i, "error"] <<- TRUE
+        df_regression_AvN[i, "error"] <<- TRUE
+      }
+    )
+    
+    fit_IPW_correct <- tryCatch(
+      {
+        glm(Y ~ A1 + A2, data = df_dat, weights = W_correct)
+      },
+      error = function(e) {
+        df_correct[i, "error"] <<- TRUE
+      }
+    )
+    
+    # Extract point estimates
+    tryCatch(
+      {
+        df_Y_0 <- data.frame(C0 = df_dat$C0, A1 = 0, A2 = 0)
+        df_Y_0$Y_0 <- predict(fit_IPW, newdata = df_Y_0)
+        
+        df_Y_1 <- data.frame(C0 = df_dat$C0, A1 = 1, A2 = 1)
+        df_Y_1$Y_1 <- predict(fit_IPW, newdata = df_Y_1)
+        
+        df_IPW_AvN[i, "est"] <- mean(df_Y_1$Y_1 - df_Y_0$Y_0)
+      },
+      error = function(e) { df_IPW_AvN[i, "error"] <<- TRUE }
+    )
+    
+    tryCatch(
+      {
+        df_Y_0 <- data.frame(C0 = df_dat$C0, A1 = 0, A2 = 0)
+        df_Y_0$Y_0 <- predict(fit_regression, newdata = df_Y_0)
+        
+        df_Y_1 <- data.frame(C0 = df_dat$C0, A1 = 1, A2 = 1)
+        df_Y_1$Y_1 <- predict(fit_regression, newdata = df_Y_1)
+        
+        df_regression_AvN[i, "est"] <- mean(df_Y_1$Y_1 - df_Y_0$Y_0)
+      },
+      error = function(e) { df_regression_AvN[i, "error"] <<- TRUE }
+    )
+    
+    tryCatch(
+      {
+        df_Y_0 <- data.frame(C0 = df_dat$C0, A1 = 0, A2 = 0)
+        df_Y_0$Y_0 <- predict(fit_IPW_correct, newdata = df_Y_0)
+        
+        df_Y_1 <- data.frame(C0 = df_dat$C0, A1 = 1, A2 = 1)
+        df_Y_1$Y_1 <- predict(fit_IPW_correct, newdata = df_Y_1)
+        
+        df_IPW_correct_AvN[i, "est"] <- mean(df_Y_1$Y_1 - df_Y_0$Y_0)
+      },
+      error = function(e) { df__IPWcorrect_AvN [i, "error"] <<- TRUE }
+    )
+    
+    # Signal progress 
+    p()
+  }
+  
+  # Compute performance measures
+  warn_zeroOne <- lapply(
+    X = list(
+      warn_zeroOne_ps1_den = warn_zeroOne_ps1_den, 
+      warn_zeroOne_ps2_den = warn_zeroOne_ps2_den, 
+      warn_zeroOne_ps1_den_correct = warn_zeroOne_ps1_den_correct, 
+      warn_zeroOne_ps2_den_correct = warn_zeroOne_ps2_den_correct, 
+      warn_zeroOne_ps1_num = warn_zeroOne_ps1_num, 
+      warn_zeroOne_ps2_num = warn_zeroOne_ps2_num
+    ), 
+    FUN = sum
+  )
+  
+  # Collect point estimates in long-format
+  df_estimates <- bind_rows(
+    list(
+      IPW_AvN = df_IPW_AvN,
+      regression_AvN = df_regression_AvN,
+      IPW_correct_AvN = df_IPW_correct_AvN
+    ),
+    .id = "model"
+  ) |> 
+    mutate(
+      id_funcForm = id_funcForm, 
+      sample_size = as.numeric(sample_size), 
+      prop_exposed = as.numeric(condition["prop_exposed"]), 
+      id_condition = id_condition
+    ) |>
+    select(model, PV, est, id_funcForm, sample_size, prop_exposed)
+  
+  # Create repList
+  repList <- paste0("df", 1:n_reps, "_condition", id_condition, ".dat")
+  utils::write.table(repList,
+      file = file.path(save_path, paste0("repList_condition", id_condition, ".dat")),
+      sep = "\t", col.names = FALSE, row.names = FALSE, quote = FALSE
+  )
+
+  return(list(
+    df_estimates = df_estimates,
+    df_prop_exposed = df_prop_exposed, 
+    warn_zeroOne = warn_zeroOne
+  ))
+}
+```
+
+# Simulation Study
+The general causal structure of the data generating mechanisms (DGMs) is illustrated in Figure 4 of the main paper. In the simulation study, data were generated under five DGMs: 
+
+- *DGM 1*: All dependencies are linear relationships.
+- *DMG 2*: Dependencies of the time-varying covariates $L_{0}$ and $L_{1}$ are quadratic.  
+- *DGM 3*: Effects from baseline $L_{0}$ and time-varying covariates $L_{0}$ and $L_{1}$ to the time-varying outcome $Y_{2}$ are quadratic relationships. 
+- *DGM 4*: Effects from time-varying covariates $L_{0}$ and $L_{1}$ to the time-varying exposures $A_{0}$ and $A_{1}$ are quadratic relationships.
+- *DGM 5*: DGM 2, 3, and 4 combined..
+
+Conditions for proportion exposed are 0.1, 0.5, and 0.9. Conditions for sample size are 300 and 1000. Combined, these resulted in 30 experimental conditions. 
+
+```{r simulation-parameters-conditions}
+# Specify different data generating mechanisms (DGMs) 
+funcForms <- c(
+  "", 
+  "B2_C0L1 <- B2_C0L2 <- 0.1; B2_L1L2 <- 0.3",
+  "B2_L2Y <- 0.3; B2_C0Y <- 0.1; B2_L1Y <- 0.15",
+  "B2_L1A1 <- 0.5; B2_L1A2 <- 0.25; B2_L2A2 <- 0.5",
+  "B2_C0L1 <- B2_C0L2 <- 0.1; B2_L1L2 <- 0.3; B2_L1A1 <- 0.5; B2_L1A2 <- 0.25; B2_L2A2 <- 0.5; B2_L2Y <- 0.3; B2_C0Y <- 0.1; B2_L1Y <- 0.15"
+)
+
+# Specify correct exposure model for "correct" modeling approach
+m_A1_correct <- c(
+  "A1 ~ C0 + L1",
+  "A1 ~ C0 + L1",
+  "A1 ~ C0 + L1",
+  "A1 ~ C0 + L1 + I( (L1 - mean(L1))^2 )",
+  "A1 ~ C0 + L1 + I( (L1 - mean(L1))^2 )"
+)
+
+m_A2_correct <- c(
+  "A2 ~ C0 + A1 + L1 + L2",
+  "A2 ~ C0 + A1 + L1 + L2",
+  "A2 ~ C0 + A1 + L1 + L2",
+  "A2 ~ C0 + A1 + L1 + L2 + I( (L1 - mean(L1))^2 ) + I( (L2 - mean(L2))^2 )", 
+  "A2 ~ C0 + A1 + L1 + L2 + I( (L1 - mean(L1))^2 ) + I( (L2 - mean(L2))^2 )"
+)
+
+# Simulation factor 2 - Sample size
+sample_sizes <- c(300, 1000)
+
+# Simulation factor 3 - Proportion exposed
+props_exposed <- c(.1, .5, .9)
+
+# Check intercepts of binary expose
+#simulate_data(1e+7, params_funcForm = funcForms[5], "B0_A1 <- 0.74; B0_A2 <- -1.07") |> summary()
+
+prop_exposed_funcForm <- c(
+  "B0_A1 <- -3.4; B0_A2 <- -4.18", # DGM 1
+  "B0_A1 <- -1.1; B0_A2 <- -2.16", 
+  "B0_A1 <- 1.2; B0_A2 <- -0.13",
+  
+  "B0_A1 <- -3.44; B0_A2 <- -4.45", # DGM 2
+  "B0_A1 <- -1.15; B0_A2 <- -2.39", 
+  "B0_A1 <- 1.14; B0_A2 <- -0.36",
+  
+  "B0_A1 <- -3.4; B0_A2 <- -4.18", # DGM 3
+  "B0_A1 <- -1.1; B0_A2 <- -2.15", 
+  "B0_A1 <- 1.2; B0_A2 <- -0.13",
+  
+  "B0_A1 <- -4.1; B0_A2 <- -5.31", # DGM 4
+  "B0_A1 <- -1.53; B0_A2 <- -2.87", 
+  "B0_A1 <- 0.8; B0_A2 <- -0.82",
+  
+  "B0_A1 <- -4.17; B0_A2 <- -5.84", # DGM 5
+  "B0_A1 <- -1.59; B0_A2 <- -3.12", 
+  "B0_A1 <- 0.74; B0_A2 <- -1.07"
+) 
+
+# Explore the range of predictor variables under DGM 1
+df_range1 <- simulate_data(
+  sample_size = 1000, 
+  params_funcForm = funcForms[1], 
+  params_prop_exposed = "B0_A1 <- -1.1; B0_A2 <- -2.16"
+) 
+lapply(df_range1, quantile, probs = c(.025, .05, .95, .975))
+
+
+# Explore the range of predictor variables under a DGM 2
+df_range2 <- simulate_data(
+  sample_size = 1000, 
+  params_funcForm = funcForms[2], 
+  params_prop_exposed = "B0_A1 <- -1.15; B0_A2 <- -2.39"
+) 
+lapply(df_range2, quantile, probs = c(.025, .05, .95, .975))
+
+# Plot conditional relationships for DGM 2
+plot_C0L1 <- data.frame(C0 = seq(2, 6, length.out = 1000)) |>
+  mutate(L1 = 0.1 * C0 + 0.1 * I((C0 - mean(C0))^2)) |>
+  ggplot(aes(C0, L1)) +
+  geom_point() + 
+  geom_smooth(method = "lm", se = FALSE, linetype = "dashed", linewidth = 2) + 
+  scale_x_continuous(
+    name = expression(L[-1]), 
+    limits = c(2,6),
+    breaks = seq(2, 6, 1)
+  ) + 
+  ylim(c(0, 1.25)) + 
+  ylab(expression("E[L"[0]*" | "*L[-1]*"]")) +
+  theme_classic() +
+  theme(
+    text = element_text(size = 40),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+
+ggsave(
+  filename = "./figures/p_funcForm2_L-1L0.png", 
+  plot = plot_C0L1, 
+  height = 7, 
+  width = 7
+)
+
+plot_C0L2 <- data.frame(C0 = seq(2, 6, length.out = 1000)) |>
+  mutate(L2 = 0.1 * C0 + 0.1 * I((C0 - mean(C0))^2)) |>
+  ggplot(aes(C0, L2)) +
+  geom_point() + 
+  geom_smooth(method = "lm", se = FALSE, linetype = "dashed", linewidth = 2) +
+  scale_x_continuous(
+    name = expression(L[-1]), 
+    limits = c(2, 6),
+    breaks = seq(2, 6, 1)
+  ) + 
+  ylim(c(0, 1.25)) + 
+  ylab(expression(paste("E[L"[1]*" | "*bar(L)[0], ", ", A[0]*"]"))) +
+  theme_classic() +
+  theme(
+    text = element_text(size = 40),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+
+ggsave(
+  filename = "./figures/p_funcForm2_C0L2.png", 
+  plot = plot_C0L2,
+  width = 7,
+  height = 7
+)
+
+plot_L1L2 <- data.frame(L1 = seq(-.5, 3.5, length.out = 1000)) |>
+  mutate(L2 = 0.3 * L1 + 0.3 * I((L1 - mean(L1))^2)) |>
+  ggplot(aes(L1, L2)) + 
+  geom_point() + 
+  geom_smooth(method = "lm", se = FALSE, linetype = "dashed", linewidth = 2) +
+  scale_x_continuous(
+    name = expression(L[0]), 
+    limits = c(-.5, 3.5),
+    breaks = seq(0, 3, 1)
+  ) + 
+  ylim(c(0, 2.5)) + 
+  ylab(expression(paste("E[L"[1]*" | "*bar(L)[0], ", ",A[0]*"]"))) +
+  theme_classic() + 
+  theme(
+    text = element_text(size = 40),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+
+ggsave(
+  filename = "./figures/p_funcForm2_L1L2.png", 
+  plot = plot_L1L2,
+  width = 7,
+  height = 7
+)
+
+# Explore the range of predictor variables under a DGM 3
+df_range3 <- simulate_data(
+  sample_size = 1e+3, 
+  params_funcForm = funcForms[3], 
+  params_prop_exposed = "B0_A1 <- -1.1; B0_A2 <- -2.15"
+) 
+lapply(df_range3, quantile, probs = c(.025, .05, .95, .975))
+
+plot_C0Y <- data.frame(C0 = seq(2, 6, length.out = 1000)) |>
+  mutate(Y = 0.1 * C0 + 0.1 * I((C0 - mean(C0))^2)) |>
+  ggplot(aes(C0, Y)) + 
+  geom_point() + 
+  geom_smooth(method = "lm", se = FALSE, linetype = "dashed", linewidth = 2) + 
+  scale_x_continuous(
+    name = expression(L[-1]), 
+    limits = c(2, 6),
+    breaks = seq(2, 6, 1)
+  ) + 
+  ylim(c(0.25, 1)) +
+  ylab(expression(paste("E[Y"[2]*" | "*bar(L)[1], ", ", bar(A)[1]*"]"))) +
+  theme_classic() +
+  theme(
+    text = element_text(size = 40),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+
+ggsave(
+  filename = "./figures/p_funcForm3_C0Y.png", 
+  plot = plot_C0Y,
+  width = 7,
+  height = 7
+)
+
+plot_L1Y <- data.frame(L1  = seq(-.5, 3.5, length.out = 1000)) |>
+  mutate(Y = 0.15 * L1 + 0.15 * I((L1 - mean(L1))^2)) |>
+  ggplot(aes(L1, Y)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, linetype = "dashed", linewidth = 2) + 
+  scale_x_continuous(
+    name = expression(L[0]), 
+    limits = c(-.5, 3.5),
+    breaks = seq(0, 3, 1)
+  ) + 
+  ylim(c(0, 1.2)) +
+  ylab(expression(paste("E[Y"[2]*" | "*bar(L)[1], ", ", bar(A)[1]*"]"))) +
+  theme_classic() +
+  theme(
+    text = element_text(size = 40),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+
+ggsave(
+  filename = "./figures/p_funcForm3_L1Y.png", 
+  plot = plot_L1Y,
+  width = 7,
+  height = 7
+)
+
+plot_L2Y <- data.frame(L2  = seq(0, 4, length.out = 1000)) |>
+  mutate(Y = 0.3 * L2 + 0.3 * I((L2 - mean(L2))^2)) |>
+  ggplot(aes(L2, Y)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, linetype = "dashed", linewidth = 2) + 
+  scale_x_continuous(
+    name = expression(L[1]), 
+    limits = c(0, 4),
+    breaks = seq(0, 4, 1)
+  ) + 
+  ylim(c(0.1, 2.5)) +
+  ylab(expression(paste("E[Y"[2]*" | "*bar(L)[1], ", ", bar(A)[1]*"]"))) +
+  theme_classic() +
+  theme(
+    text = element_text(size = 40),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+
+ggsave(
+  filename = "./figures/p_funcForm3_L2Y.png", 
+  plot = plot_L2Y,
+  width = 7,
+  height = 7
+)
+
+# Create plots funcForm 4 - Propensity score model
+df_range4 <- simulate_data(
+  sample_size = 1e+3, 
+  params_funcForm = funcForms[4], 
+  params_prop_exposed = "B0_A1 <- -1.53; B0_A2 <- -2.87"
+) 
+lapply(df_range4, quantile, probs = c(.025, .05, .95, .975))
+
+plot_L1A1 <- data.frame(L1  = seq(-.5, 3.5, length.out = 1000)) |>
+  mutate(Pr_A1 = plogis(0.5 * L1 + 0.5 * I((L1 - mean(L1))^2))) |>
+  ggplot(aes(L1, Pr_A1)) +
+  geom_point() +
+  geom_smooth(
+    method = "glm", 
+    method.args = list(family = "binomial"),
+    se = FALSE, 
+    linetype = "dashed", 
+    linewidth = 2
+  ) + 
+  scale_x_continuous(
+    name = expression(L[0]), 
+    limits = c(-.5, 3.5),
+    breaks = seq(0, 3, 1)
+  ) + 
+  ylim(c(0, 1)) + 
+  ylab(expression(Pr*"("*A[0]*"= 1 | "*bar(L)[0]*")")) +
+  theme_classic() + 
+  theme(
+    text = element_text(size = 40),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+
+ggsave(
+  filename = "./figures/p_funcForm4_L1A1.png", 
+  plot = plot_L1A1,
+  width = 7,
+  height = 7
+)
+
+plot_L1A2 <- data.frame(L1  = seq(-.5, 3.5, length.out = 1000)) |>
+  mutate(Pr_A2 = plogis(0.25 * L1 + 0.25 * I((L1 - mean(L1))^2))) |>
+  ggplot(aes(L1, Pr_A2)) +
+  geom_point() +
+  geom_smooth(
+    method = "glm", 
+    method.args = list(family = "binomial"), 
+    se = FALSE,
+    linetype = "dashed", 
+    linewidth = 2
+  ) + 
+  scale_x_continuous(
+    name = expression(L[0]), 
+    limits = c(-.5, 3.5),
+    breaks = seq(0, 3, 1)
+  ) + 
+  ylim(c(0, 1)) +
+  ylab(expression(Pr*"("*A[1]*"= 1 | "*bar(L)[1]*", "*A[0]*")")) +
+  theme_classic() +
+  theme(
+    text = element_text(size = 40),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+
+ggsave(
+  filename = "./figures/p_funcForm4_L1A2.png", 
+  plot = plot_L1A2,
+  width = 7,
+  height = 7
+)
+
+plot_L2A2 <- data.frame(L2  = seq(0, 4, length.out = 1000)) |>
+  mutate(Pr_A2 = plogis(0.5 * L2 + 0.5 * I((L2 - mean(L2))^2))) |>
+  ggplot(aes(L2, Pr_A2)) +
+  geom_point() + 
+  geom_smooth(
+    method = "glm", 
+    method.args = list(family = "binomial"), 
+    se = FALSE,
+    linetype = "dashed", 
+    linewidth = 2
+  ) + 
+  scale_x_continuous(
+    name = expression(L[1]), 
+    limits = c(0, 4),
+    breaks = seq(0, 4, 1)
+  ) + 
+  ylim(c(0, 1)) +
+  ylab(expression(Pr*"("*A[1]*"= 1 | "*bar(L)[1]*", "*A[0]*")")) +
+  theme_classic() +
+  theme(
+    text = element_text(size = 40),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+
+ggsave(
+  filename = "./figures/p_funcForm4_L2A2.png", 
+  plot = plot_L2A2,
+  width = 7,
+  height = 7
+)
+
+# Simulate population value joint effect A1 and always vs. never effect
+# check_pv(2e+7, funcForms[1], prop_exposed_funcForm[2])
+# check_pv(2e+7, funcForms[2], prop_exposed_funcForm[5])
+# check_pv(2e+7, funcForms[3], prop_exposed_funcForm[8])
+# check_pv(2e+7, funcForms[4], prop_exposed_funcForm[11])
+# check_pv(2e+7, funcForms[5], prop_exposed_funcForm[14])
+PVs_AvN<- c(0.72, 0.72, 0.72, 0.72, 0.72)
+
+# Create simulation conditions
+conditions <- data.frame(
+  funcForm = rep(funcForms, each = 3),
+  id_funcForm = rep(c(1:5), each = 3),
+  m_A1_correct = rep(m_A1_correct, each = 3),
+  m_A2_correct = rep(m_A2_correct, each = 3),
+  PV_AvN = rep(PVs_AvN, each = 3),
+  prop_exposed = rep(props_exposed, times = 5),
+  prop_exposed_funcForm = prop_exposed_funcForm
+) 
+
+df_conditions <- conditions |>
+  bind_rows(conditions) |>
+  mutate(
+    sample_size = rep(sample_sizes, each = nrow(conditions)),
+    id_condition = row_number()
+  ) 
+
+conditions <- asplit(df_conditions, 1) 
+
+## Run simulations
+n_reps <- 1000
+
+future::plan(multisession, workers = 7)
+
+with_progress({
+  p <- progressor(nrow(conditions)*n_reps)
+
+  out <- furrr::future_map(
+    .x = conditions,
+    .f = run_condition,
+    n_reps = n_reps, 
+    p = p,
+    save_folder = "simulation",
+    .options = furrr::furrr_options(
+      seed = 20230429
+    ) 
+  )
+})
+
+future::plan(sequential)
+
+# Restructure results
+out_estimates <- out |>
+  purrr::map(function(x) {x$df_estimates}) |>
+  bind_rows(.id = "condition")
+
+out_prop_exposed <- out |>
+  purrr::map(function(x) {x$df_prop_exposed}) |>
+  bind_rows(.id = "condition")
+
+# Run MONTE CARLO analyses in Mplus
+MplusAutomation::runModels(
+  target = ".\\simulation",
+  recursive = TRUE,
+  quiet = FALSE
+)
+
+# Extract results linear path analysis
+df_Mplus_linear <- map(
+  .x = paste0(".\\simulation\\condition", 1:30, "\\results_condition", 1:30, ".dat"),
+  .f = read.delim,
+  header = FALSE
+) |> map(slice, seq(4, (8*n_reps) - 4, 8)) |>
+  map(
+    .f = separate, 
+    col = V1, 
+    into = c(paste0("P", 21:25), "Mplus_linear_A1", "Mplus_linear_AvN"),
+    sep = c(15, 31, 47, 63, 79, 95)
+  ) |>
+  map(select, Mplus_linear_A1, Mplus_linear_AvN) |>
+  map(
+    .f = pivot_longer, 
+    cols = everything(), 
+    names_to = "model", 
+    values_to = "est",
+    values_transform = list(est = as.numeric)
+  ) |>
+  list_rbind(names_to = "condition") |> 
+  rowwise() |> 
+  mutate(
+    id_funcForm = as.numeric(conditions[[condition]]["id_funcForm"]), 
+    sample_size = as.numeric(conditions[[condition]]["sample_size"]), 
+    prop_exposed = as.numeric(conditions[[condition]]["prop_exposed"]), 
+    PV = if_else(model == "Mplus_linear_A1", .32, .72)
+  ) |> 
+  ungroup() |> 
+  select(condition, model, PV, est, id_funcForm, sample_size, prop_exposed) 
+
+## Check if extraction of point estimates was successful: Compare to Mplus .out file
+# check_linear_AvN <- df_Mplus_linear |> 
+#   group_by(condition, model) |>
+#   summarise(
+#     average = mean(est),
+#     SD = sd(est),
+#     MSE = mean((est - .72)^2)
+#   )
+
+## Add linear path analysis estimates to other results
+out_estimates$condition <- as.numeric(out_estimates$condition)
+
+# Read in correct path analyses (DGM 1)
+n_params <- 2
+n_props <- 3
+n_sample_sizes <- 2
+
+df_Mplus_correct_DGM1 <- map(
+  .x = paste0(".\\simulation\\condition", c(1:3, 16:18), "\\results_correct_condition", c(1:3, 16:18), ".dat"),
+  .f = read.delim,
+  header = FALSE
+) |> map(slice, seq(4, (8*n_reps) - 4, 8)) |>
+  map(
+    .f = separate, 
+    col = V1, 
+    into = c(paste0("P", 21:25), "Mplus_correct_A1", "Mplus_correct_AvN"),
+    sep = c(15, 31, 47, 63, 79, 95)
+  ) |>
+  map(select, Mplus_correct_A1, Mplus_correct_AvN) |>
+  map(
+    .f = pivot_longer, 
+    cols = everything(), 
+    names_to = "model", 
+    values_to = "est",
+    values_transform = list(est = as.numeric)
+  ) |>
+  list_rbind() |> 
+  mutate(condition = rep(c(1:3, 16:18), each = n_params * n_reps)) |>
+  rowwise() |> 
+  mutate(
+    id_funcForm = as.numeric(conditions[[condition]]["id_funcForm"]), 
+    sample_size = as.numeric(conditions[[condition]]["sample_size"]), 
+    prop_exposed = as.numeric(conditions[[condition]]["prop_exposed"]), 
+    PV = if_else(model == "Mplus_correct_A1", .32, .72)
+  ) |> 
+  ungroup() |> 
+  select(condition, model, PV, est, id_funcForm, sample_size, prop_exposed) 
+
+## Check if extraction of point estimates was successful: Compare to Mplus .out file
+# check_correct_DGM1 <- df_Mplus_correct_DGM1 |> 
+#   group_by(condition, model) |>
+#   summarise(
+#     average = mean(estimate),
+#     SD = sd(estimate),
+#     MSE = mean((estimate - PV)^2)
+#   )
+
+# Read in Mplus results DGM 2, 3, and 4 (correct)
+df_Mplus_correct_DGM234 <- map(
+  .x = paste0(".\\simulation\\condition", c(4:12, 19:27), "\\results_correct_condition", c(4:12, 19:27), ".dat"),
+  .f = read.delim,
+  header = FALSE
+) |> map(slice, seq(4, (8*n_reps) - 4, 8)) |>
+  map(
+    .f = separate, 
+    col = V1, 
+    into = c(paste0("P", 21:28), "Mplus_correct_A1", "Mplus_correct_AvN"),
+    sep = c(15, 31, 47, 63, 79, 95, 111, 127, 143)
+  ) |>
+  map(select, Mplus_correct_A1, Mplus_correct_AvN) |>
+  map(
+    .f = pivot_longer, 
+    cols = everything(), 
+    names_to = "model", 
+    values_to = "est",
+    values_transform = list(est = as.numeric)
+  ) |>
+  list_rbind() |> 
+  mutate(condition = rep(c(4:12, 19:27), each = n_params * n_reps)) |>
+  rowwise() |> 
+  mutate(
+    id_funcForm = as.numeric(conditions[[condition]]["id_funcForm"]), 
+    sample_size = as.numeric(conditions[[condition]]["sample_size"]), 
+    prop_exposed = as.numeric(conditions[[condition]]["prop_exposed"]), 
+    PV = if_else(model == "Mplus_correct_A1", .32, .72)
+  ) |> 
+  ungroup() |> 
+  select(condition, model, PV, est, id_funcForm, sample_size, prop_exposed) 
+
+## Check if extraction of point estimates was successful: Compare to Mplus .out file
+# check_correct_DGM234 <- df_Mplus_correct_DGM234 |> 
+#   group_by(condition, model) |>
+#   summarise(
+#     average = mean(estimate),
+#     SD = sd(estimate),
+#     MSE = mean((estimate - PV)^2)
+#   )
+  
+# Read in Mplus results DGM 5 (correct)
+df_Mplus_correct_DGM5 <- map(
+  .x = paste0(".\\simulation\\condition", c(13:15, 28:30), "\\results_correct_condition", c(13:15, 28:30), ".dat"),
+  .f = read.delim,
+  header = FALSE
+) |> map(slice, seq(5, (10*n_reps) - 5, 10)) |>
+  map(
+    .f = separate, 
+    col = V1, 
+    into = c(paste0("P", 31:34), "Mplus_correct_A1", "Mplus_correct_AvN"),
+    sep = c(15, 31, 47, 63, 79)
+  ) |>
+  map(select, Mplus_correct_A1, Mplus_correct_AvN) |>
+  map(
+    .f = pivot_longer, 
+    cols = everything(), 
+    names_to = "model", 
+    values_to = "est",
+    values_transform = list(est = as.numeric)
+  ) |>
+  list_rbind() |> 
+  mutate( condition = rep(c(13:15, 28:30), each = n_params * n_reps) ) |> 
+  rowwise() |> 
+  mutate(
+    id_funcForm = as.numeric(conditions[[condition]]["id_funcForm"]), 
+    sample_size = as.numeric(conditions[[condition]]["sample_size"]), 
+    prop_exposed = as.numeric(conditions[[condition]]["prop_exposed"]), 
+    PV = if_else(model == "Mplus_correct_A1", .32, .72)
+  ) |> 
+  ungroup() |> 
+  select(condition, model, PV, est, id_funcForm, sample_size, prop_exposed) 
+
+## Check if extraction of point estimates was successful: Compare to Mplus .out file
+# check_correct_DGM5 <- df_Mplus_correct_DGM5 |> 
+#   group_by(condition, model) |>
+#   summarise(
+#     average = mean(estimate),
+#     SD = sd(estimate),
+#     MSE = mean((estimate - PV)^2)
+#   )
+
+# Add estimates of Mplus_correct to other estimates
+df_estimates <- rbind(
+  out_estimates, df_Mplus_linear, 
+  df_Mplus_correct_DGM1, df_Mplus_correct_DGM234, df_Mplus_correct_DGM5
+) |> 
+  filter(PV != 0.32)
+```
+
+# Results
+For each experimental condition, we compute the bias and mean square error (MSE) of the five estimation methods. 
+
+```{r simulation-results}
+df_performance <- df_estimates |> 
+  group_by(condition, model, id_funcForm, sample_size, prop_exposed) |> 
+  summarise(
+    bias = mean(est - PV, na.rm = TRUE),
+    MSE = mean((est - PV)^2, na.rm = TRUE), # Mistakenly named `MSE` as `bias` (copying-error) 
+    PV = mean(PV, na.rm = TRUE), 
+    # Compute Monte-Carlo standard error
+    MCSE_bias = sqrt( (1 / (n_reps * (n_reps - 1))) * sum( (est - mean(est))^2 ) ),
+    MCSE_MSE = sqrt( (1 / (n_reps * (n_reps - 1))) * sum( ( (est - PV)^2 - MSE )^2 ) ),
+    # Compute 95% confidence interval for performance measures
+    LB_bias = bias - 1.96 * MCSE_bias,
+    UB_bias = bias + 1.96 * MCSE_bias,
+    LB_MSE = MSE - 1.96 * MCSE_MSE, 
+    UB_MSE = MSE + 1.96 * MCSE_MSE
+  ) 
+
+# Visualize performance statistics
+figure6 <- df_performance |>
+  filter(prop_exposed == .1 | prop_exposed == .5) |>
+  filter(sample_size == 1000) |> 
+  mutate(
+    model_mod = recode_factor(model, 
+      "IPW_AvN" = "IPW (L)",
+      "Mplus_linear_AvN" = "Path (L)",
+      "IPW_correct_AvN" = "IPW (L, Q)", 
+      "Mplus_correct_AvN" = "Path (L, Q)",
+      "regression_AvN" = "Unadjusted"
+    ), 
+    prop_exposed_mod = recode(prop_exposed, 
+      "0.1" = "10% exposed",
+      "0.5" = "50% exposed",
+    ),
+    id_funcForm_mod = recode(id_funcForm,
+      "1" = "DGM 1\nNo misspecification",
+      "2" = "DGM 2\nCovariate",
+      "3" = "DGM 3\nOutcome",
+      "4" = "DGM 4\nExposure",
+      "5" = "DGM 5\nCombined"
+    )
+  ) |>
+  ggplot(aes(x = bias, y = as.factor(model_mod))) +
+  geom_point(size = 3) + 
+  geom_pointrange(aes(xmin = LB_bias, xmax = UB_bias)) + 
+  scale_y_discrete(limits = c("Unadjusted", "Path (L, Q)", "IPW (L, Q)", "Path (L)", "IPW (L)")) + 
+  #scale_x_continuous(n.breaks = 3, limits = c(-.8, 1.5)) +
+  geom_vline(xintercept = 0, linetype = 2) + 
+  facet_grid(prop_exposed_mod ~ as.factor(id_funcForm_mod)) + 
+  xlab("Bias") +
+  labs(color = "Sample size") +
+  theme(
+    legend.position = "bottom", 
+    axis.title.y = element_blank(), 
+    text = element_text(size = 20)
+  )
+
+ggsave(
+  filename = "./figures/figure6.png", 
+  plot = figure6,
+  width = 14,
+  height = 7
+)
+
+figure7 <- df_performance |>
+  filter(prop_exposed == .1 | prop_exposed == .5) |>
+  filter(sample_size == 1000) |>
+  mutate(
+    model_mod = recode_factor(model, 
+      "IPW_AvN" = "IPW (L)",
+      "Mplus_linear_AvN" = "Path (L)",
+      "IPW_correct_AvN" = "IPW (L, Q)", 
+      "Mplus_correct_AvN" = "Path (L, Q)",
+      "regression_AvN" = "Unadjusted"
+    ), 
+    prop_exposed_mod = recode(prop_exposed, 
+      "0.1" = "10% exposed",
+      "0.5" = "50% exposed"
+    ),
+    id_funcForm_mod = recode(id_funcForm,
+      "1" = "DGM 1\nNo misspecification",
+      "2" = "DGM 2\nCovariate",
+      "3" = "DGM 3\nOutcome",
+      "4" = "DGM 4\nExposure",
+      "5" = "DGM 5\nCombined"
+    )
+  ) |>
+  ggplot(aes(x = MSE, y = as.factor(model_mod))) +
+  geom_point(size = 3) + 
+  geom_pointrange(aes(xmin = LB_MSE, xmax = UB_MSE)) + 
+  scale_y_discrete(limits = c("Unadjusted", "Path (L, Q)", "IPW (L, Q)", "Path (L)", "IPW (L)")) + 
+  scale_x_continuous(n.breaks = 3, limits = c(0, 2)) +
+  geom_vline(xintercept = 0, linetype = 2) + 
+  facet_grid(prop_exposed_mod ~ as.factor(id_funcForm_mod)) + 
+  xlab("MSE") +
+  labs(color = "Sample size") +
+  theme(
+    legend.position = "bottom", 
+    axis.title.y = element_blank(), 
+    text = element_text(size = 20)
+  )
+
+ggsave(
+  filename = "./figures/figure7.png", 
+  plot = figure7,
+  width = 14,
+  height = 7
+)
+```

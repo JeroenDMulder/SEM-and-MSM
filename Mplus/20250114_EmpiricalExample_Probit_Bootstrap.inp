@@ -1,0 +1,81 @@
+TITLE:
+    Mulder, Luijken, Penning-de Vries, Hamaker (2024).
+    Path analysis for estimating CDE and always vs. never effects.
+    Exposure and covariate missingness handled via single imputation in R.
+
+DATA: 
+    FILE = df_target_imp.dat;
+
+VARIABLE: 
+    NAMES = ID 
+            wght_0 wght_1 wght_2 wght_3 ! Weight (cont.)
+            smk_1 smk_2 ! Smoking status (binary)
+            gznd_0 gznd_1 gznd_2 ! Feeling healthy (ordinal)
+            alc_0 alc_1 alc_2 ! Alcohol freq. (ordinal)
+            HPA_0 HPA_1 HPA_2 ! Hours physical activity
+            sHrt_0 sHrt_1 sHrt_2 ! Self-reported heart problems
+            age sex 
+            coD1_0 coD2_0 coD1_1 ! Comorbidity (dummy 1, 2)
+            coD2_1 coD1_2 coD2_2
+            smXco1_2; ! Interaction for MOD
+
+    USEVARIABLES = sex age ! Baseline covariates
+                   wght_0 HPA_0 ! Continuous time-varying covariates
+                   wght_1 HPA_1 
+                   wght_2 HPA_2
+                   smk_1 smk_2 ! Exposure
+                   wght_3; ! Outcome
+
+    MISSING = .;
+    CATEGORICAL = smk_1 smk_2;
+
+
+ANALYSIS:
+   ESTIMATOR = ML;
+   LINK = PROBIT; 
+   ! When ESTIMATOR = WLSMV, LINK defaults to PROBIT. 
+   BOOTSTRAP = 999;
+
+MODEL:
+    ! Outcome model
+    wght_3 ON smk_1 smk_2 (B_A1Y B_A2Y); ! Exposures
+    wght_3 ON wght_2 HPA_2 (B_wghtY B_HPAY); ! Time-varying covariates
+    wght_3 ON sex age; ! Baseline covariates
+
+    ! Propensity score models
+    smk_2 ON sex-smk_1;
+    smk_1 ON sex-HPA_1;
+
+    ! Covariate model - wght
+    wght_2 ON smk_1 (B_A1wght);
+    wght_2 ON sex-HPA_1;
+    wght_1 ON sex-HPA_0;
+
+    ! Covariate model - HPA
+    HPA_2 ON smk_1 (B_A1HPA);
+    HPA_2 ON sex-HPA_1;
+    HPA_1 ON sex-HPA_0;
+
+    ! Thresholds
+    [smk_1$1 smk_2$1];
+
+    ! Variances exogenous variables (make covariates endogenous)
+    sex-HPA_0;
+
+    ! Residual variances covariates at same wave
+    HPA_1 WITH wght_1 ;
+    HPA_2 WITH wght_2;
+
+MODEL CONSTRAINT:
+    NEW(CDE1_con);
+    NEW(AvN); 
+    
+    ! CDE of SMK_1 on WGHT_3 via continuous covariates
+    CDE1_con = B_A1wght * B_wghtY + 
+               B_A1HPA * B_HPAY +
+               B_A1Y;
+    
+    AvN = CDE1_con + B_A2Y;
+
+OUTPUT:
+    CINT(BOOT) TECH4;

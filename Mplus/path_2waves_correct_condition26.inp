@@ -1,0 +1,58 @@
+TITLE:
+   Traditional path analysis for estimating joint effects 
+   and prolongued exposure effect.
+   - K = 2 (waves)
+   - Model correctly specified
+
+DATA:
+    FILE = repList_condition26.dat;
+    TYPE = MONTECARLO;
+
+VARIABLE: 
+    NAMES = C0 L1 A1 L2 A2 Y 
+            Pr_A1 Pr_A2 ps1 ps2 W W_correct;  
+    USEVARIABLES = C0-Y L1L1 L2L2;
+    MISSING = .;
+    CATEGORICAL = A1 A2;
+
+DEFINE: 
+    CENTER L1 L2 (GRANDMEAN);
+    L1L1 = L1**2;
+    L2L2 = L2**2;
+
+ANALYSIS:
+   ESTIMATOR = ML;
+   LINK = PROBIT; 
+
+MODEL:
+    ! Lagged effects on Y
+    Y ON A1*0.2 A2*0.4 (B_A1Y B_A2Y);
+    Y ON L1*0.15 L2*0.3 (B_L1Y B_L2Y);
+    Y ON C0*0.1 (B_C0Y);
+
+    ! Lagged effects on L
+    L2 ON L1*0.3 A1*0.4 C0*0.1 (B_L1L2 B_A1L2 B_C0L2);
+    L1 ON C0*0.1; 
+
+    ! Lagged effects on A
+    A2 ON C0 A1 L1 L2 L1L1 L2L2;
+    A1 ON C0 L1 L1L1;
+    
+    ! Variance
+    C0;
+
+    ! Residual variances
+    L1 L2 Y;
+
+    ! Thresholds
+    [A1$1 A2$1] (tau1 tau2);
+    
+MODEL CONSTRAINT:
+    NEW(JTE_A1*0.32);
+    JTE_A1 = B_A1L2*B_L2Y + B_A1Y;
+    
+    NEW(AvN*0.72); 
+    AvN = JTE_A1 + B_A2Y;
+
+SAVEDATA:
+    RESULTS = results_correct_condition26.dat;
